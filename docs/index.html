@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Perimtr — Know Your Perimeter Before Attackers Do</title>
+  <meta name="description" content="Perimtr is an open-source perimeter intelligence platform. Give it your network ranges and domains — it investigates, inventories findings, and tracks what changed since the last scan." />
+
+  <!-- Google Fonts (only allowed external resource) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Inline favicon: simplified hex shield -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 2 L28 8 V18 C28 24 22 29 16 30 C10 29 4 24 4 18 V8 Z' fill='none' stroke='%236c63ff' stroke-width='2.5' stroke-linejoin='round'/><path d='M16 10 V20 M11 15 H21' stroke='%236c63ff' stroke-width='2.5' stroke-linecap='round'/></svg>" />
+
+  <style>
+    /* =========================================================
+       DESIGN TOKENS
+       ========================================================= */
+    :root {
+      /* Typography */
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+      /* Fluid type scale */
+      --text-xs:   clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
+      --text-sm:   clamp(0.875rem, 0.84rem + 0.18vw, 0.9375rem);
+      --text-base: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
+      --text-lg:   clamp(1.0625rem, 1.02rem + 0.25vw, 1.125rem);
+      --text-xl:   clamp(1.25rem, 1.18rem + 0.4vw, 1.375rem);
+      --text-2xl:  clamp(1.5rem, 1.4rem + 0.6vw, 1.75rem);
+      --text-3xl:  clamp(2rem, 1.8rem + 1vw, 2.5rem);
+      --text-hero: clamp(2.5rem, 2rem + 3vw, 4.25rem);
+
+      /* Spacing */
+      --sp-1:  0.25rem;
+      --sp-2:  0.5rem;
+      --sp-3:  0.75rem;
+      --sp-4:  1rem;
+      --sp-5:  1.25rem;
+      --sp-6:  1.5rem;
+      --sp-8:  2rem;
+      --sp-10: 2.5rem;
+      --sp-12: 3rem;
+      --sp-16: 4rem;
+      --sp-20: 5rem;
+      --sp-24: 6rem;
+
+      /* Radius */
+      --r-sm: 6px;
+      --r-md: 10px;
+      --r-lg: 14px;
+      --r-xl: 20px;
+
+      /* Brand accent — purple/violet */
+      --accent: #6c63ff;
+      --accent-soft: #8b84ff;
+      --accent-deep: #4f46e5;
+      --accent-glow: rgba(108, 99, 255, 0.35);
+
+      /* Severity */
+      --sev-critical: #ff4d6d;
+      --sev-high:     #ff7a45;
+      --sev-medium:   #ffc94d;
+      --sev-low:      #4dd4ac;
+      --sev-info:     #5eb4ff;
+
+      /* Motion */
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --dur-fast: 160ms;
+      --dur-base: 280ms;
+      --dur-slow: 520ms;
+
+      /* Layout */
+      --container: 1200px;
+      --container-narrow: 960px;
+      --nav-h: 68px;
+    }
+
+    /* Dark theme (default) */
+    [data-theme="dark"] {
+      --bg:            #07070c;
+      --bg-elev:       #0d0d14;
+      --bg-raised:    #12121c;
+      --surface:       #161622;
+      --surface-2:     #1c1c2a;
+      --border:        rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text:          #e9e9f2;
+      --text-muted:    #9a9ab0;
+      --text-dim:      #6a6a80;
+      --grid-line:     rgba(108, 99, 255, 0.06);
+      --code-bg:       #0a0a12;
+      --terminal-bg:   #0b0b14;
+      --shadow-lg:     0 24px 60px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    /* Light theme */
+    [data-theme="light"] {
+      --bg:            #fafafb;
+      --bg-elev:       #ffffff;
+      --bg-raised:    #ffffff;
+      --surface:       #ffffff;
+      --surface-2:     #f4f4f8;
+      --border:        rgba(20, 20, 40, 0.09);
+      --border-strong: rgba(20, 20, 40, 0.16);
+      --text:          #12121c;
+      --text-muted:    #555566;
+      --text-dim:      #8a8a9a;
+      --grid-line:     rgba(108, 99, 255, 0.08);
+      --code-bg:       #0a0a12;
+      --terminal-bg:   #0b0b14;
+      --shadow-lg:     0 18px 50px -22px rgba(30, 30, 60, 0.25), 0 0 0 1px rgba(20, 20, 40, 0.05);
+    }
+
+    /* =========================================================
+       BASE
+       ========================================================= */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: var(--text-base);
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+      transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+    }
+
+    h1, h2, h3, h4 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    p { margin: 0; color: var(--text-muted); }
+    a { color: inherit; text-decoration: none; }
+    img, svg { display: block; max-width: 100%; }
+
+    ::selection { background: var(--accent); color: #fff; }
+
+    /* =========================================================
+       UTILITY
+       ========================================================= */
+    .container {
+      width: 100%;
+      max-width: var(--container);
+      margin: 0 auto;
+      padding: 0 var(--sp-6);
+    }
+    .mono { font-family: var(--font-mono); }
+    .accent { color: var(--accent); }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding: var(--sp-1) var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      background: rgba(108, 99, 255, 0.06);
+    }
+    .eyebrow::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    .section-label {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: var(--sp-4);
+    }
+
+    .section-title {
+      font-size: var(--text-3xl);
+      letter-spacing: -0.025em;
+      max-width: 720px;
+      margin-bottom: var(--sp-4);
+    }
+    .section-sub {
+      font-size: var(--text-lg);
+      max-width: 640px;
+      color: var(--text-muted);
+      margin-bottom: var(--sp-12);
+    }
+
+    section { padding: var(--sp-24) 0; position: relative; }
+    @media (max-width: 768px) { section { padding: var(--sp-16) 0; } }
+
+    /* =========================================================
+       BUTTONS
+       ========================================================= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      padding: 0.8rem 1.4rem;
+      font-family: var(--font-sans);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      border-radius: var(--r-md);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: transform var(--dur-fast) var(--ease-out),
+                  background-color var(--dur-fast) var(--ease-out),
+                  border-color var(--dur-fast) var(--ease-out),
+                  box-shadow var(--dur-fast) var(--ease-out);
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 8px 24px -8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+    .btn-primary:hover {
+      background: var(--accent-soft);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 32px -8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+    .btn-ghost:hover {
+      background: var(--surface);
+      border-color: var(--accent);
+    }
+
+    /* =========================================================
+       NAV
+       ========================================================= */
+    .nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--nav-h);
+      z-index: 100;
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
+      background: color-mix(in srgb, var(--bg) 78%, transparent);
+      border-bottom: 1px solid transparent;
+      transition: border-color var(--dur-base) var(--ease-out),
+                  background-color var(--dur-base) var(--ease-out);
+    }
+    .nav.scrolled { border-bottom-color: var(--border); }
+    .nav-inner {
+      max-width: var(--container);
+      margin: 0 auto;
+      height: 100%;
+      padding: 0 var(--sp-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-6);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-weight: 700;
+      font-size: var(--text-lg);
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .brand-mark { width: 28px; height: 28px; color: var(--accent); }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-6);
+    }
+    .nav-links a {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      font-weight: 500;
+      transition: color var(--dur-fast) var(--ease-out);
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+    }
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--dur-fast) var(--ease-out);
+    }
+    .icon-btn:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+      background: var(--surface);
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    .theme-toggle .sun { display: none; }
+    .theme-toggle .moon { display: block; }
+    [data-theme="light"] .theme-toggle .sun { display: block; }
+    [data-theme="light"] .theme-toggle .moon { display: none; }
+
+    .nav-toggle {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    @media (max-width: 820px) {
+      .nav-links {
+        position: fixed;
+        top: var(--nav-h);
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0;
+        padding: var(--sp-4) var(--sp-6) var(--sp-6);
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        transform: translateY(-8px);
+        opacity: 0;
+        pointer-events: none;
+        transition: all var(--dur-base) var(--ease-out);
+      }
+      .nav-links.open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .nav-links a {
+        width: 100%;
+        padding: var(--sp-4) 0;
+        border-bottom: 1px solid var(--border);
+        font-size: var(--text-base);
+      }
+      .nav-toggle { display: inline-flex; align-items: center; justify-content: center; }
+    }
+
+    /* =========================================================
+       HERO
+       ========================================================= */
+    .hero {
+      position: relative;
+      padding-top: calc(var(--nav-h) + var(--sp-16));
+      padding-bottom: var(--sp-24);
+      overflow: hidden;
+    }
+    .hero-grid-bg {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 75%);
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 75%);
+      pointer-events: none;
+    }
+    .hero-glow {
+      position: absolute;
+      left: 50%;
+      top: -20%;
+      width: 900px;
+      height: 900px;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
+      opacity: 0.6;
+      filter: blur(60px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    .hero-title {
+      font-size: var(--text-hero);
+      letter-spacing: -0.03em;
+      margin: var(--sp-6) 0 var(--sp-6);
+      font-weight: 800;
+    }
+    .hero-title .accent {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-soft) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-sub {
+      font-size: var(--text-lg);
+      max-width: 640px;
+      margin: 0 auto var(--sp-10);
+      color: var(--text-muted);
+    }
+    .hero-ctas {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+      justify-content: center;
+    }
+
+    /* Terminal */
+    .terminal-wrap {
+      margin-top: var(--sp-16);
+      max-width: 880px;
+      margin-left: auto;
+      margin-right: auto;
+      position: relative;
+      z-index: 1;
+    }
+    .terminal {
+      background: var(--terminal-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg),
+                  0 0 80px -20px var(--accent-glow);
+      text-align: left;
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-3) var(--sp-4);
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .terminal-dots span {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      display: block;
+    }
+    .terminal-dots span:nth-child(1) { background: #ff5f57; }
+    .terminal-dots span:nth-child(2) { background: #ffbd2e; }
+    .terminal-dots span:nth-child(3) { background: #28c940; }
+    .terminal-title {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: #9a9ab0;
+      flex: 1;
+      text-align: center;
+    }
+    .terminal-body {
+      padding: var(--sp-5) var(--sp-6);
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.7;
+      color: #d9d9e8;
+      min-height: 500px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    @media (max-width: 600px) {
+      .terminal-body { font-size: 11.5px; padding: var(--sp-4); min-height: 520px; }
+    }
+    .term-prompt { color: var(--accent-soft); }
+    .term-dim    { color: #6a6a80; }
+    .term-ok     { color: #4dd4ac; }
+    .term-warn   { color: #ffc94d; }
+    .term-err    { color: #ff7a99; }
+    .term-info   { color: #8b84ff; }
+    .term-high   { color: #ff7a45; font-weight: 600; }
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1.1em;
+      vertical-align: text-bottom;
+      background: var(--accent);
+      animation: blink 1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* =========================================================
+       FEATURES
+       ========================================================= */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-5);
+    }
+    @media (max-width: 900px) { .features-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .features-grid { grid-template-columns: 1fr; } }
+
+    .card {
+      position: relative;
+      padding: var(--sp-6);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      transition: transform var(--dur-base) var(--ease-out),
+                  border-color var(--dur-base) var(--ease-out),
+                  background-color var(--dur-base) var(--ease-out);
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, var(--accent-glow), transparent 40%);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity var(--dur-base) var(--ease-out);
+    }
+    .card:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+    .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--r-sm);
+      background: rgba(108, 99, 255, 0.08);
+      border: 1px solid rgba(108, 99, 255, 0.2);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      margin-bottom: var(--sp-5);
+    }
+    .card-icon svg { width: 22px; height: 22px; }
+    .card h3 {
+      font-size: var(--text-lg);
+      margin-bottom: var(--sp-2);
+      letter-spacing: -0.015em;
+    }
+    .card p { font-size: var(--text-sm); line-height: 1.65; }
+
+    /* =========================================================
+       HOW IT WORKS
+       ========================================================= */
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: var(--sp-4);
+      position: relative;
+    }
+    @media (max-width: 1000px) { .flow { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 560px)  { .flow { grid-template-columns: repeat(2, 1fr); } }
+
+    .flow-step {
+      position: relative;
+      padding: var(--sp-5);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      transition: border-color var(--dur-fast) var(--ease-out);
+    }
+    .flow-step:hover { border-color: var(--border-strong); }
+    .flow-step .n {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(108, 99, 255, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(108, 99, 255, 0.25);
+      border-radius: 50%;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      margin-bottom: var(--sp-4);
+    }
+    .flow-step h4 {
+      font-size: var(--text-base);
+      margin-bottom: var(--sp-2);
+    }
+    .flow-step p {
+      font-size: var(--text-sm);
+      line-height: 1.55;
+    }
+
+    /* =========================================================
+       MODULES TABLE
+       ========================================================= */
+    .modules-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: var(--text-sm);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .modules-table thead th {
+      text-align: left;
+      padding: var(--sp-4) var(--sp-5);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .modules-table td {
+      padding: var(--sp-5);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      color: var(--text-muted);
+    }
+    .modules-table tbody tr:last-child td { border-bottom: 0; }
+    .modules-table tbody tr:hover td { background: var(--surface); }
+    .module-name {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      color: var(--text);
+      font-weight: 600;
+    }
+    .module-name svg {
+      width: 18px; height: 18px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    @media (max-width: 800px) {
+      .modules-table, .modules-table thead, .modules-table tbody, .modules-table tr, .modules-table td, .modules-table th {
+        display: block;
+      }
+      .modules-table thead { display: none; }
+      .modules-table tr {
+        border-bottom: 1px solid var(--border);
+        padding: var(--sp-5);
+      }
+      .modules-table tr:last-child { border-bottom: 0; }
+      .modules-table td {
+        padding: var(--sp-1) 0;
+        border: 0;
+      }
+      .modules-table td::before {
+        content: attr(data-label);
+        display: block;
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        margin-top: var(--sp-3);
+        margin-bottom: var(--sp-1);
+      }
+      .modules-table td.module-name-cell::before { display: none; }
+    }
+
+    /* =========================================================
+       DIFF / CHANGE DETECTION
+       ========================================================= */
+    .diff-panel {
+      background: var(--terminal-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+    }
+    .diff-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+      padding: var(--sp-4) var(--sp-5);
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: #9a9ab0;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .diff-bar svg { width: 14px; height: 14px; color: var(--accent); }
+    .diff-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .diff-item {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-4);
+      padding: var(--sp-4) var(--sp-5);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      color: #d9d9e8;
+    }
+    .diff-item:last-child { border-bottom: 0; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge-critical { color: var(--sev-critical); background: rgba(255, 77, 109, 0.1); border: 1px solid rgba(255, 77, 109, 0.25); }
+    .badge-medium   { color: var(--sev-medium);   background: rgba(255, 201, 77, 0.1); border: 1px solid rgba(255, 201, 77, 0.25); }
+    .badge-resolved { color: var(--sev-low);      background: rgba(77, 212, 172, 0.1); border: 1px solid rgba(77, 212, 172, 0.25); }
+    .badge-changed  { color: var(--sev-medium);   background: rgba(255, 201, 77, 0.08); border: 1px solid rgba(255, 201, 77, 0.2); }
+    .diff-text { flex: 1; }
+    .diff-text .path { color: var(--accent-soft); }
+    @media (max-width: 560px) {
+      .diff-item { flex-wrap: wrap; font-size: 12.5px; }
+    }
+
+    /* =========================================================
+       INSTALL
+       ========================================================= */
+    .install-layout {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: var(--sp-12);
+      align-items: start;
+    }
+    @media (max-width: 900px) { .install-layout { grid-template-columns: 1fr; gap: var(--sp-8); } }
+
+    .code-block {
+      background: var(--terminal-bg);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+    }
+    .code-block-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: var(--sp-3) var(--sp-4);
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: #9a9ab0;
+    }
+    .copy-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #9a9ab0;
+      padding: 4px 10px;
+      border-radius: var(--r-sm);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all var(--dur-fast) var(--ease-out);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .copy-btn:hover { color: #fff; border-color: var(--accent); }
+    .copy-btn svg { width: 12px; height: 12px; }
+    .code-block pre {
+      margin: 0;
+      padding: var(--sp-5);
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.75;
+      color: #d9d9e8;
+      overflow-x: auto;
+    }
+    .code-block .cmt  { color: #6a6a80; }
+    .code-block .cmd  { color: var(--accent-soft); }
+    .code-block .str  { color: #4dd4ac; }
+
+    /* =========================================================
+       LLM PROVIDERS
+       ========================================================= */
+    .llm-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--sp-4);
+      margin-top: var(--sp-10);
+    }
+    @media (max-width: 820px) { .llm-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .llm-card {
+      padding: var(--sp-6);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      text-align: center;
+      transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+    }
+    .llm-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+    }
+    .llm-logo {
+      width: 40px; height: 40px;
+      margin: 0 auto var(--sp-4);
+      color: var(--accent);
+    }
+    .llm-card h4 {
+      font-size: var(--text-base);
+      margin-bottom: var(--sp-1);
+    }
+    .llm-card span {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+    }
+
+    .callout {
+      margin-top: var(--sp-10);
+      padding: var(--sp-6) var(--sp-8);
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--r-md);
+      font-size: var(--text-base);
+      color: var(--text-muted);
+      max-width: 920px;
+    }
+    .callout strong { color: var(--text); font-weight: 600; }
+
+    /* =========================================================
+       FOOTER
+       ========================================================= */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: var(--sp-16) 0 var(--sp-10);
+      margin-top: var(--sp-12);
+    }
+    .footer-grid {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: var(--sp-8);
+      flex-wrap: wrap;
+    }
+    .footer-brand { max-width: 340px; }
+    .footer-brand p {
+      margin-top: var(--sp-3);
+      font-size: var(--text-sm);
+    }
+    .footer-brand a { color: var(--accent); }
+    .footer-brand a:hover { color: var(--accent-soft); }
+    .footer-col h5 {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin: 0 0 var(--sp-4);
+      font-weight: 500;
+    }
+    .footer-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+    .footer-col a { font-size: var(--text-sm); color: var(--text-muted); transition: color var(--dur-fast) var(--ease-out); }
+    .footer-col a:hover { color: var(--text); }
+    .footer-meta {
+      margin-top: var(--sp-10);
+      padding-top: var(--sp-6);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--sp-4);
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--text-dim);
+    }
+    .license-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--r-sm);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .license-badge::before {
+      content: '';
+      width: 6px; height: 6px;
+      background: var(--sev-low);
+      border-radius: 50%;
+    }
+
+    /* =========================================================
+       ANIMATIONS
+       ========================================================= */
+    .reveal {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 700ms var(--ease-out), transform 700ms var(--ease-out);
+    }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+      html { scroll-behavior: auto; }
+      .cursor { animation: none; opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- =========================================================
+     NAV
+========================================================= -->
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="#" class="brand" aria-label="Perimtr home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+        <path d="M16 2 L28 8 V18 C28 24 22 29 16 30 C10 29 4 24 4 18 V8 Z"/>
+        <path d="M16 9 V23 M10 16 H22" stroke-linecap="round"/>
+      </svg>
+      <span>Perimtr</span>
+    </a>
+
+    <div class="nav-links" id="navLinks">
+      <a href="#features">Features</a>
+      <a href="#how">How It Works</a>
+      <a href="#modules">Modules</a>
+      <a href="#install">Get Started</a>
+    </div>
+
+    <div class="nav-actions">
+      <a href="https://github.com/jph4cks/perimtr" class="icon-btn" aria-label="View on GitHub" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2.9-.3 2-.4 3-.4s2.1.1 3 .4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+        </svg>
+        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- =========================================================
+     HERO
+========================================================= -->
+<header class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-grid-bg" aria-hidden="true"></div>
+  <div class="container">
+    <div class="hero-content">
+      <span class="eyebrow reveal">Open Source &middot; v1.0.0</span>
+      <h1 class="hero-title reveal">
+        Know Your Perimeter<br/>
+        <span class="accent">Before Attackers Do</span>
+      </h1>
+      <p class="hero-sub reveal">
+        Give Perimtr your network ranges and domains. It investigates, inventories findings,
+        and tracks what changed since the last scan — so nothing slips through the cracks.
+      </p>
+      <div class="hero-ctas reveal">
+        <a href="https://github.com/jph4cks/perimtr" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2.9-.3 2-.4 3-.4s2.1.1 3 .4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/>
+          </svg>
+          View on GitHub
+        </a>
+        <a href="#install" class="btn btn-ghost">
+          Quick Install
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="terminal-wrap reveal">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="terminal-title">perimtr — assessment</div>
+          <div style="width: 52px;"></div>
+        </div>
+        <div class="terminal-body" id="terminal" aria-label="Terminal demonstration"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- =========================================================
+     FEATURES
+========================================================= -->
+<section id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// Capabilities</div>
+      <h2 class="section-title">Built for continuous perimeter monitoring</h2>
+      <p class="section-sub">Six focused modules, a change-aware diff engine, and interactive reports — everything you need to keep an eye on what's exposed.</p>
+    </div>
+
+    <div class="features-grid">
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="m21 21-4.3-4.3"/>
+            <path d="M11 8v6M8 11h6" opacity=".6"/>
+          </svg>
+        </div>
+        <h3>Reconnaissance</h3>
+        <p>Six specialized modules scan ports, enumerate DNS, check HTTP headers, analyze certificates, detect vulnerabilities, and validate email security.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12h4l3-9 4 18 3-9h4"/>
+          </svg>
+        </div>
+        <h3>Change Detection</h3>
+        <p>Every scan compares against the previous assessment. New ports, subdomains, vulnerabilities — you see exactly what changed and when.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a9 9 0 0 0 0 18 9 9 0 0 0 0-18z"/>
+            <path d="M2 12h4M18 12h4M12 2v4M12 18v4"/>
+            <circle cx="12" cy="12" r="2"/>
+          </svg>
+        </div>
+        <h3>Stealth Scanning</h3>
+        <p>Rate-limited by default. Slow SYN scans and timed requests avoid triggering IDS/IPS or getting your IP blocked.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M7 14h4M7 17h8"/>
+          </svg>
+        </div>
+        <h3>Interactive Reports</h3>
+        <p>Self-contained HTML dashboards with severity charts, filterable tables, and tabbed navigation. No server required — just open the file.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </div>
+        <h3>LLM-Powered Analysis</h3>
+        <p>Connect OpenAI, Anthropic, OpenRouter, or a local LLM for AI-generated executive summaries, risk scores, and prioritized remediation.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <path d="M17.5 14v3.5M17.5 21v-.5M14 17.5h3.5M21 17.5h-.5"/>
+          </svg>
+        </div>
+        <h3>Plugin Architecture</h3>
+        <p>Every module inherits from ReconModule. Add new capabilities by dropping a single Python file — no framework changes needed.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     HOW IT WORKS
+========================================================= -->
+<section id="how">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// Pipeline</div>
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-sub">A linear, idempotent pipeline — from configuration to a shareable HTML dashboard.</p>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step reveal">
+        <span class="n">01</span>
+        <h4>Configure</h4>
+        <p>Define your networks, domains, and schedule in perimtr.yaml</p>
+      </div>
+      <div class="flow-step reveal">
+        <span class="n">02</span>
+        <h4>Scan</h4>
+        <p>Six modules run concurrently with rate limiting</p>
+      </div>
+      <div class="flow-step reveal">
+        <span class="n">03</span>
+        <h4>Inventory</h4>
+        <p>Findings stored as timestamped JSON — full history preserved</p>
+      </div>
+      <div class="flow-step reveal">
+        <span class="n">04</span>
+        <h4>Compare</h4>
+        <p>Diff engine detects new, removed, and changed findings</p>
+      </div>
+      <div class="flow-step reveal">
+        <span class="n">05</span>
+        <h4>Analyze</h4>
+        <p>LLM generates executive summary and risk score (or use built-in analysis)</p>
+      </div>
+      <div class="flow-step reveal">
+        <span class="n">06</span>
+        <h4>Report</h4>
+        <p>Interactive HTML dashboard with every finding, filter, and chart</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     MODULES
+========================================================= -->
+<section id="modules">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// Modules</div>
+      <h2 class="section-title">Six modules. Every inch of your perimeter.</h2>
+      <p class="section-sub">Each module is a self-contained Python class. Enable only what you need; results are unified in a single inventory.</p>
+    </div>
+
+    <div class="reveal" style="overflow-x: auto;">
+      <table class="modules-table">
+        <thead>
+          <tr>
+            <th style="width: 22%;">Module</th>
+            <th style="width: 40%;">What It Checks</th>
+            <th style="width: 38%;">Key Detections</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+                Port Scanner
+              </div>
+            </td>
+            <td data-label="What It Checks">Network ranges via SYN scan with nmap + socket fallback</td>
+            <td data-label="Key Detections">Open ports, new services, service versions</td>
+          </tr>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/>
+                </svg>
+                DNS Enumeration
+              </div>
+            </td>
+            <td data-label="What It Checks">crt.sh CT logs, brute-force, zone transfers, full records</td>
+            <td data-label="Key Detections">Subdomains, DNS changes, zone transfer vulnerabilities</td>
+          </tr>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 14h10"/>
+                </svg>
+                HTTP Headers
+              </div>
+            </td>
+            <td data-label="What It Checks">HSTS, CSP, X-Frame-Options, cookies, TLS, Server header</td>
+            <td data-label="Key Detections">Missing security headers, info leakage, weak TLS</td>
+          </tr>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+                </svg>
+                WHOIS &amp; Certs
+              </div>
+            </td>
+            <td data-label="What It Checks">Domain registration, SSL certificates, key strength</td>
+            <td data-label="Key Detections">Expiring certs, weak keys, issuer changes</td>
+          </tr>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.3 2.3a3 3 0 0 1 3.4 0l7 4.9A3 3 0 0 1 22 9.8v4.4a3 3 0 0 1-1.3 2.6l-7 4.9a3 3 0 0 1-3.4 0l-7-4.9A3 3 0 0 1 2 14.2V9.8a3 3 0 0 1 1.3-2.6z"/>
+                  <path d="M12 8v4M12 16v.01"/>
+                </svg>
+                Vuln Checks
+              </div>
+            </td>
+            <td data-label="What It Checks">Databases, RDP, FTP, SNMP, SSH, SMTP relay</td>
+            <td data-label="Key Detections">Exposed databases, dangerous services, default credentials</td>
+          </tr>
+          <tr>
+            <td class="module-name-cell">
+              <div class="module-name">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>
+                </svg>
+                Domain Security
+              </div>
+            </td>
+            <td data-label="What It Checks">SPF, DKIM, DMARC, DNSSEC, CAA records</td>
+            <td data-label="Key Detections">Email spoofing risk, DNS poisoning, unauthorized CAs</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     CHANGE DETECTION
+========================================================= -->
+<section id="changes">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// Change Detection</div>
+      <h2 class="section-title">See what changed since the last scan</h2>
+      <p class="section-sub">Perimtr compares every assessment against your previous baseline. New exposures surface instantly; fixes are verified automatically.</p>
+    </div>
+
+    <div class="diff-panel reveal">
+      <div class="diff-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>
+        </svg>
+        diff — acme-corp &middot; 2026-04-16 vs 2026-04-09
+      </div>
+      <ul class="diff-list">
+        <li class="diff-item">
+          <span class="badge badge-critical">New</span>
+          <span class="diff-text">Port <span class="path">3389 (RDP)</span> opened on <span class="path">app1.acme.com</span></span>
+        </li>
+        <li class="diff-item">
+          <span class="badge badge-medium">New</span>
+          <span class="diff-text">Subdomain <span class="path">k8s.acme.com</span> discovered</span>
+        </li>
+        <li class="diff-item">
+          <span class="badge badge-resolved">Resolved</span>
+          <span class="diff-text">Anonymous <span class="path">FTP access</span> removed</span>
+        </li>
+        <li class="diff-item">
+          <span class="badge badge-changed">Changed</span>
+          <span class="diff-text">Certificate issuer changed for <span class="path">acme.com</span></span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     INSTALL
+========================================================= -->
+<section id="install">
+  <div class="container">
+    <div class="install-layout">
+      <div class="reveal">
+        <div class="section-label">// Install</div>
+        <h2 class="section-title" style="margin-bottom: var(--sp-5);">Up and running in under a minute</h2>
+        <p style="font-size: var(--text-base); margin-bottom: var(--sp-5);">Clone the repo, install the package, and run the interactive setup. Perimtr will walk you through your first assessment.</p>
+        <p style="font-size: var(--text-sm); color: var(--text-dim);">Requires Python 3.10+. Optional: nmap for SYN scanning.</p>
+      </div>
+
+      <div class="code-block reveal">
+        <div class="code-block-head">
+          <span>bash</span>
+          <button class="copy-btn" id="copyBtn" aria-label="Copy install commands">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            <span id="copyLabel">Copy</span>
+          </button>
+        </div>
+<pre id="installCode"><span class="cmd">git</span> clone https://github.com/jph4cks/perimtr.git
+<span class="cmd">cd</span> perimtr
+<span class="cmd">pip</span> install -e .
+
+<span class="cmt"># First run — interactive setup</span>
+<span class="cmd">perimtr</span>
+
+<span class="cmt"># Or with LLM support</span>
+<span class="cmd">pip</span> install -e <span class="str">".[llm]"</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     LLM INTEGRATION
+========================================================= -->
+<section id="llm">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// LLM Integration</div>
+      <h2 class="section-title">Plug in the model you already use</h2>
+      <p class="section-sub">Perimtr speaks OpenAI, Anthropic, OpenRouter, and any OpenAI-compatible local server. Bring your own key — or run fully offline.</p>
+    </div>
+
+    <div class="llm-grid">
+      <div class="llm-card reveal">
+        <svg class="llm-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M22.28 10.1a5.49 5.49 0 0 0-.48-4.52 5.56 5.56 0 0 0-6-2.66A5.5 5.5 0 0 0 11.55 1 5.56 5.56 0 0 0 6.2 4.83a5.5 5.5 0 0 0-3.66 2.66 5.56 5.56 0 0 0 .68 6.52 5.5 5.5 0 0 0 .48 4.52 5.56 5.56 0 0 0 6 2.66A5.5 5.5 0 0 0 13.95 23a5.56 5.56 0 0 0 5.35-3.83 5.5 5.5 0 0 0 3.66-2.66 5.56 5.56 0 0 0-.68-6.41zM13.95 21.53a4.1 4.1 0 0 1-2.64-.96l.13-.07 4.4-2.54a.71.71 0 0 0 .36-.63v-6.2l1.86 1.08a.07.07 0 0 1 .04.05v5.14a4.13 4.13 0 0 1-4.15 4.13zM5 17.86a4.1 4.1 0 0 1-.5-2.77l.13.08 4.4 2.54a.72.72 0 0 0 .72 0l5.38-3.1v2.14a.07.07 0 0 1-.03.06L10.65 19.4a4.14 4.14 0 0 1-5.65-1.54zM3.85 8.28a4.12 4.12 0 0 1 2.16-1.8v5.24a.7.7 0 0 0 .36.62l5.36 3.1-1.87 1.07a.07.07 0 0 1-.06 0L5.36 13.94a4.13 4.13 0 0 1-1.51-5.66zm15.3 3.54-5.38-3.11 1.86-1.07a.07.07 0 0 1 .07 0l4.45 2.56a4.13 4.13 0 0 1-.63 7.46v-5.24a.71.71 0 0 0-.37-.6zm1.85-2.78-.13-.08-4.4-2.55a.72.72 0 0 0-.72 0L10.37 9.5V7.36a.07.07 0 0 1 .03-.06l4.45-2.57a4.13 4.13 0 0 1 6.15 4.28zM9.35 12.87l-1.86-1.08a.07.07 0 0 1-.04-.05V6.6a4.13 4.13 0 0 1 6.78-3.17l-.13.07-4.4 2.54a.71.71 0 0 0-.36.63zm1.01-2.19 2.4-1.38 2.4 1.38v2.76l-2.4 1.38-2.4-1.38z"/>
+        </svg>
+        <h4>OpenAI</h4>
+        <span>ChatGPT</span>
+      </div>
+
+      <div class="llm-card reveal">
+        <svg class="llm-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4.5 19h2.9l1-2.75h5.7l1 2.75h2.9L12.5 5h-2.7Zm4.6-5 2-5.5 2 5.5Z"/>
+          <path d="M20.5 5h-2.3l-1.7 4.5L14.8 5h-1.4l2.5 6.3L13.4 19h1.7l5.4-14z" opacity=".5"/>
+        </svg>
+        <h4>Anthropic</h4>
+        <span>Claude</span>
+      </div>
+
+      <div class="llm-card reveal">
+        <svg class="llm-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/>
+        </svg>
+        <h4>OpenRouter</h4>
+        <span>Any Model</span>
+      </div>
+
+      <div class="llm-card reveal">
+        <svg class="llm-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="12" rx="2"/>
+          <path d="M7 20h10M12 16v4M8 9l2 2-2 2M13 13h3"/>
+        </svg>
+        <h4>Local LLMs</h4>
+        <span>Ollama, vLLM</span>
+      </div>
+    </div>
+
+    <div class="callout reveal">
+      When no LLM is configured, Perimtr still generates reports with predefined recommendations based on findings. <strong>The LLM layer is the icing on the cake</strong> — it elevates reports with executive summaries, risk scoring, and actionable remediation steps.
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     FOOTER
+========================================================= -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#" class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 2 L28 8 V18 C28 24 22 29 16 30 C10 29 4 24 4 18 V8 Z"/>
+            <path d="M16 9 V23 M10 16 H22" stroke-linecap="round"/>
+          </svg>
+          <span>Perimtr</span>
+        </a>
+        <p>Built by <a href="https://redhound.us" target="_blank" rel="noopener">Red Hound Information Security</a>. Open source, MIT licensed.</p>
+      </div>
+
+      <div class="footer-col">
+        <h5>Project</h5>
+        <ul>
+          <li><a href="https://github.com/jph4cks/perimtr" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/jph4cks/perimtr#readme" target="_blank" rel="noopener">Documentation</a></li>
+          <li><a href="https://github.com/jph4cks/perimtr/issues" target="_blank" rel="noopener">Issues</a></li>
+          <li><a href="https://github.com/jph4cks/perimtr/releases" target="_blank" rel="noopener">Releases</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h5>Explore</h5>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how">How It Works</a></li>
+          <li><a href="#modules">Modules</a></li>
+          <li><a href="#install">Get Started</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-meta">
+      <span>&copy; 2026 Red Hound Information Security</span>
+      <span class="license-badge">MIT License</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  /* =========================================================
+     THEME
+     ========================================================= */
+  // Safe storage wrapper — gracefully no-ops in sandboxed preview environments
+  // (falls back to an in-memory store when localStorage is unavailable / blocked).
+  const safeStorage = (() => {
+    let mem = {};
+    try {
+      const k = '__perimtr_test__';
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+      return {
+        get: (key) => { try { return window.localStorage.getItem(key); } catch (_) { return mem[key] ?? null; } },
+        set: (key, val) => { try { window.localStorage.setItem(key, val); } catch (_) { mem[key] = val; } }
+      };
+    } catch (_) {
+      return {
+        get: (key) => mem[key] ?? null,
+        set: (key, val) => { mem[key] = val; }
+      };
+    }
+  })();
+
+  (function initTheme() {
+    // Dark by default — respect user's explicit choice only
+    const stored = safeStorage.get('perimtr-theme');
+    const theme = stored || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    safeStorage.set('perimtr-theme', next);
+  });
+
+  /* =========================================================
+     NAV
+     ========================================================= */
+  const nav = document.getElementById('nav');
+  const navLinks = document.getElementById('navLinks');
+  const navToggle = document.getElementById('navToggle');
+
+  const onScroll = () => {
+    if (window.scrollY > 8) nav.classList.add('scrolled');
+    else nav.classList.remove('scrolled');
+  };
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  navToggle.addEventListener('click', () => {
+    navLinks.classList.toggle('open');
+  });
+  navLinks.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => navLinks.classList.remove('open'));
+  });
+
+  /* =========================================================
+     REVEAL ON SCROLL
+     ========================================================= */
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    // Stagger children within same parent group slightly
+    el.style.transitionDelay = Math.min(i * 20, 180) + 'ms';
+    io.observe(el);
+  });
+
+  /* =========================================================
+     COPY BUTTON
+     ========================================================= */
+  const copyBtn = document.getElementById('copyBtn');
+  const copyLabel = document.getElementById('copyLabel');
+  const installCode = document.getElementById('installCode');
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(installCode.innerText);
+      copyLabel.textContent = 'Copied';
+      setTimeout(() => { copyLabel.textContent = 'Copy'; }, 1600);
+    } catch (err) {
+      copyLabel.textContent = 'Failed';
+      setTimeout(() => { copyLabel.textContent = 'Copy'; }, 1600);
+    }
+  });
+
+  /* =========================================================
+     TERMINAL TYPING
+     ========================================================= */
+  const terminalEl = document.getElementById('terminal');
+
+  // Each line is { html, pauseAfter (ms), instant (bool — append instantly instead of char-by-char) }
+  const lines = [
+    { html: '<span class="term-prompt">$</span> <span class="term-info">perimtr</span> scan', pauseAfter: 400, speed: 38 },
+    { html: ' ', pauseAfter: 180, instant: true },
+    { html: '<span class="term-info">Perimtr Assessment</span> <span class="term-dim">—</span> Acme Corp Perimeter', pauseAfter: 120, instant: true },
+    { html: '   <span class="term-dim">Networks:</span> 203.0.113.0/24', pauseAfter: 80, instant: true },
+    { html: '   <span class="term-dim">Domains:</span>  acme.com, api.acme.com', pauseAfter: 80, instant: true },
+    { html: '   <span class="term-dim">Modules:</span>  6 enabled', pauseAfter: 320, instant: true },
+    { html: ' ', pauseAfter: 140, instant: true },
+    { html: ' <span class="term-ok">✓</span> Port Scanner <span class="term-dim">..............</span> 3 hosts, 10 open ports <span class="term-dim">(42.1s)</span>', pauseAfter: 220, instant: true },
+    { html: ' <span class="term-ok">✓</span> DNS Enumeration <span class="term-dim">...........</span> 12 subdomains found <span class="term-dim">(18.3s)</span>', pauseAfter: 180, instant: true },
+    { html: ' <span class="term-ok">✓</span> HTTP Security Headers <span class="term-dim">.....</span> <span class="term-warn">4 missing headers</span> <span class="term-dim">(3.2s)</span>', pauseAfter: 180, instant: true },
+    { html: ' <span class="term-ok">✓</span> WHOIS &amp; Certificates <span class="term-dim">......</span> <span class="term-warn">1 cert expiring soon</span> <span class="term-dim">(5.7s)</span>', pauseAfter: 180, instant: true },
+    { html: ' <span class="term-ok">✓</span> Vulnerability Checks <span class="term-dim">......</span> <span class="term-err">3 critical findings</span> <span class="term-dim">(12.4s)</span>', pauseAfter: 180, instant: true },
+    { html: ' <span class="term-ok">✓</span> Domain Security <span class="term-dim">...........</span> SPF <span class="term-ok">✓</span> DKIM <span class="term-ok">✓</span> DMARC <span class="term-err">✗</span> <span class="term-dim">(8.1s)</span>', pauseAfter: 380, instant: true },
+    { html: ' ', pauseAfter: 140, instant: true },
+    { html: ' <span class="term-info">Changes Since Last Assessment:</span>', pauseAfter: 140, instant: true },
+    { html: ' <span class="term-dim">┌──────────┬───────┐</span>', pauseAfter: 60, instant: true },
+    { html: ' <span class="term-dim">│</span> <span class="term-err">NEW</span>      <span class="term-dim">│</span>   4   <span class="term-dim">│</span>', pauseAfter: 80, instant: true },
+    { html: ' <span class="term-dim">│</span> <span class="term-ok">Resolved</span> <span class="term-dim">│</span>   2   <span class="term-dim">│</span>', pauseAfter: 80, instant: true },
+    { html: ' <span class="term-dim">│</span> <span class="term-warn">Changed</span>  <span class="term-dim">│</span>   1   <span class="term-dim">│</span>', pauseAfter: 80, instant: true },
+    { html: ' <span class="term-dim">└──────────┴───────┘</span>', pauseAfter: 260, instant: true },
+    { html: ' ', pauseAfter: 120, instant: true },
+    { html: ' <span class="term-high">Risk Score: 72/100 (HIGH)</span>', pauseAfter: 320, instant: true },
+    { html: ' ', pauseAfter: 120, instant: true },
+    { html: ' <span class="term-ok">✓</span> Report: <span class="term-info">data/acme-corp/report_20260416.html</span>', pauseAfter: 160, instant: true },
+    { html: ' <span class="term-ok">✓</span> Assessment complete in <span class="term-info">89.8s</span>', pauseAfter: 0, instant: true },
+  ];
+
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function typeHTML(line, speed) {
+    // Type visible characters; HTML tags are appended whole for speed
+    return new Promise((resolve) => {
+      const container = document.createElement('div');
+      terminalEl.appendChild(container);
+      let i = 0;
+      const src = line;
+      let buf = '';
+      function step() {
+        if (i >= src.length) { resolve(); return; }
+        if (src[i] === '<') {
+          const close = src.indexOf('>', i);
+          buf += src.slice(i, close + 1);
+          i = close + 1;
+          container.innerHTML = buf;
+          step();
+        } else {
+          buf += src[i];
+          i++;
+          container.innerHTML = buf;
+          setTimeout(step, speed);
+        }
+      }
+      step();
+    });
+  }
+
+  function appendLine(line) {
+    const container = document.createElement('div');
+    container.innerHTML = line;
+    terminalEl.appendChild(container);
+  }
+
+  function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function runTerminal() {
+    // Add blinking cursor at end as a sibling
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+
+    if (prefersReduced) {
+      terminalEl.innerHTML = '';
+      lines.forEach(l => appendLine(l.html));
+      terminalEl.appendChild(cursor);
+      return;
+    }
+
+    for (const l of lines) {
+      if (l.instant) {
+        appendLine(l.html);
+      } else {
+        await typeHTML(l.html, l.speed || 34);
+      }
+      if (l.pauseAfter) await delay(l.pauseAfter);
+    }
+    terminalEl.appendChild(cursor);
+  }
+
+  // Start terminal when hero enters viewport (plays once)
+  const terminalObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        runTerminal();
+        terminalObs.disconnect();
+      }
+    });
+  }, { threshold: 0.2 });
+  terminalObs.observe(terminalEl);
+
+  /* =========================================================
+     SMOOTH ANCHOR OFFSET (account for fixed nav)
+     ========================================================= */
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      const id = a.getAttribute('href');
+      if (!id || id === '#') return;
+      const target = document.querySelector(id);
+      if (!target) return;
+      e.preventDefault();
+      const y = target.getBoundingClientRect().top + window.scrollY - (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) + 12);
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    });
+  });
+</script>
+
+</body>
+</html>

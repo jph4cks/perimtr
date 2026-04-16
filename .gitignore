@@ -23,6 +23,7 @@ perimtr.yaml
 data/
 *.html
 !perimtr/templates/report.html
+!docs/*.html
 
 # Testing
 .pytest_cache/
@@ -32,3 +33,4 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+*.png
