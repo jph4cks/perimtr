@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perimtr Report — {{ project_name }}</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3348;
+    --text: #e2e5f0;
+    --text-muted: #8b90a5;
+    --accent: #6c63ff;
+    --accent-light: #8b83ff;
+    --critical: #ff4757;
+    --high: #ff6b35;
+    --medium: #ffa502;
+    --low: #2ed573;
+    --info: #1e90ff;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, #1a1d27 0%, #242836 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+  }
+
+  header .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .logo { display: flex; align-items: center; gap: 0.75rem; }
+  .logo svg { width: 40px; height: 40px; }
+  .logo h1 { font-size: 1.75rem; font-weight: 700; }
+  .logo span { color: var(--accent); }
+  .meta { color: var(--text-muted); font-size: 0.875rem; text-align: right; }
+
+  /* Navigation tabs */
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+    background: var(--surface);
+    padding: 0.25rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { background: var(--accent); color: white; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .card-lg { grid-column: span 2; }
+
+  .stat-card .stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0.5rem 0;
+  }
+
+  .stat-card .stat-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .stat-card.critical .stat-value { color: var(--critical); }
+  .stat-card.high .stat-value { color: var(--high); }
+  .stat-card.medium .stat-value { color: var(--medium); }
+  .stat-card.low .stat-value { color: var(--low); }
+  .stat-card.accent .stat-value { color: var(--accent); }
+
+  /* Risk meter */
+  .risk-meter {
+    width: 100%;
+    height: 12px;
+    background: var(--surface2);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+
+  .risk-meter .fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 1s ease-out;
+  }
+
+  .risk-low { background: var(--low); }
+  .risk-medium { background: var(--medium); }
+  .risk-high { background: var(--high); }
+  .risk-critical { background: var(--critical); }
+
+  /* Tables */
+  .table-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .table-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .table-header h3 { font-size: 1rem; }
+
+  .filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-btn {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(108, 99, 255, 0.1);
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    padding: 0.75rem 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: rgba(108, 99, 255, 0.03); }
+
+  /* Severity badges */
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-critical { background: rgba(255, 71, 87, 0.15); color: var(--critical); }
+  .badge-high { background: rgba(255, 107, 53, 0.15); color: var(--high); }
+  .badge-medium { background: rgba(255, 165, 2, 0.15); color: var(--medium); }
+  .badge-low { background: rgba(46, 213, 115, 0.15); color: var(--low); }
+  .badge-info { background: rgba(30, 144, 255, 0.15); color: var(--info); }
+
+  /* Charts area */
+  .chart-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .chart-card h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+  }
+
+  canvas { width: 100% !important; max-height: 250px; }
+
+  /* Bar chart (CSS-only) */
+  .bar-chart { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .bar-label {
+    width: 120px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 24px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    min-width: fit-content;
+    transition: width 1s ease-out;
+  }
+
+  /* Subdomain list */
+  .subdomain-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .subdomain-item {
+    padding: 0.5rem 0.75rem;
+    background: var(--surface2);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent-light);
+  }
+
+  /* Analysis section */
+  .analysis-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .analysis-section h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .analysis-text { color: var(--text-muted); line-height: 1.8; white-space: pre-wrap; }
+
+  .priority-list { list-style: none; }
+
+  .priority-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .priority-item:last-child { border-bottom: none; }
+
+  .priority-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  /* Changes section */
+  .change-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--surface2);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+  }
+
+  .change-icon { font-size: 1.25rem; flex-shrink: 0; }
+  .change-new .change-icon { color: var(--critical); }
+  .change-removed .change-icon { color: var(--low); }
+  .change-changed .change-icon { color: var(--medium); }
+
+  /* Search */
+  .search-input {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.875rem;
+    width: 250px;
+  }
+
+  .search-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Record details */
+  .record-group { margin-bottom: 1.5rem; }
+  .record-type {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .record-value {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 0.25rem 0;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    .chart-container { grid-template-columns: 1fr; }
+    .card-grid { grid-template-columns: 1fr 1fr; }
+    .card-lg { grid-column: span 1; }
+    .table-header { flex-direction: column; align-items: flex-start; }
+    .search-input { width: 100%; }
+    td, th { padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+    header .container { flex-direction: column; text-align: center; }
+    .meta { text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="logo">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="40" height="40" rx="8" fill="#6c63ff"/>
+        <path d="M20 8L10 14V26L20 32L30 26V14L20 8Z" stroke="white" stroke-width="2" fill="none"/>
+        <circle cx="20" cy="20" r="4" fill="white"/>
+      </svg>
+      <h1>Perimtr <span>Report</span></h1>
+    </div>
+    <div class="meta">
+      <div><strong>{{ project_name }}</strong></div>
+      <div>{{ timestamp[:19] }}</div>
+      <div>v{{ version }}</div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Navigation -->
+  <div class="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="network">Network</button>
+    <button class="tab" data-tab="dns">DNS</button>
+    <button class="tab" data-tab="web">Web Security</button>
+    <button class="tab" data-tab="certs">Certificates</button>
+    <button class="tab" data-tab="domain">Domain Security</button>
+    <button class="tab" data-tab="vulns">Vulnerabilities</button>
+    {% if has_diff %}<button class="tab" data-tab="changes">Changes</button>{% endif %}
+    {% if has_analysis %}<button class="tab" data-tab="analysis">AI Analysis</button>{% endif %}
+    <button class="tab" data-tab="all-issues">All Issues</button>
+  </div>
+
+  <!-- Overview Tab -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="card-grid">
+      <div class="card stat-card accent">
+        <div class="stat-label">Hosts Discovered</div>
+        <div class="stat-value">{{ total_hosts }}</div>
+      </div>
+      <div class="card stat-card accent">
+        <div class="stat-label">Open Ports</div>
+        <div class="stat-value">{{ total_open_ports }}</div>
+      </div>
+      <div class="card stat-card accent">
+        <div class="stat-label">Subdomains</div>
+        <div class="stat-value">{{ total_subdomains }}</div>
+      </div>
+      <div class="card stat-card {% if severity_counts.critical > 0 %}critical{% elif severity_counts.high > 0 %}high{% elif severity_counts.medium > 0 %}medium{% else %}low{% endif %}">
+        <div class="stat-label">Total Issues</div>
+        <div class="stat-value">{{ total_issues }}</div>
+      </div>
+    </div>
+
+    <!-- Severity breakdown -->
+    <div class="card-grid">
+      <div class="card stat-card critical">
+        <div class="stat-label">Critical</div>
+        <div class="stat-value">{{ severity_counts.critical }}</div>
+      </div>
+      <div class="card stat-card high">
+        <div class="stat-label">High</div>
+        <div class="stat-value">{{ severity_counts.high }}</div>
+      </div>
+      <div class="card stat-card medium">
+        <div class="stat-label">Medium</div>
+        <div class="stat-value">{{ severity_counts.medium }}</div>
+      </div>
+      <div class="card stat-card low">
+        <div class="stat-label">Low / Info</div>
+        <div class="stat-value">{{ severity_counts.low + severity_counts.info }}</div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-card">
+        <h3>Severity Distribution</h3>
+        <div class="bar-chart" id="severity-chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Services Discovered</h3>
+        <div class="bar-chart" id="services-chart"></div>
+      </div>
+    </div>
+
+    {% if has_analysis %}
+    <div class="analysis-section">
+      <h2>&#128202; Executive Summary</h2>
+      {% if analysis.risk_score is defined %}
+      <div style="margin-bottom: 1rem;">
+        <span style="font-size: 2rem; font-weight: 700; color: var(--{% if analysis.risk_rating == 'critical' %}critical{% elif analysis.risk_rating == 'high' %}high{% elif analysis.risk_rating == 'medium' %}medium{% else %}low{% endif %});">
+          {{ analysis.risk_score }}/100
+        </span>
+        <span class="badge badge-{{ analysis.risk_rating }}">{{ analysis.risk_rating }}</span>
+      </div>
+      <div class="risk-meter">
+        <div class="fill risk-{% if analysis.risk_score >= 80 %}critical{% elif analysis.risk_score >= 60 %}high{% elif analysis.risk_score >= 40 %}medium{% else %}low{% endif %}" style="width: {{ analysis.risk_score }}%;"></div>
+      </div>
+      {% endif %}
+      <div class="analysis-text">{{ analysis.executive_summary | default('No executive summary available.') }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Network Tab -->
+  <div class="tab-content" id="tab-network">
+    <h2 style="margin-bottom: 1.5rem;">Network Scan Results</h2>
+    {% if port_data.hosts %}
+    <div class="table-container">
+      <div class="table-header">
+        <h3>Discovered Hosts &amp; Ports ({{ port_data.hosts | length }} hosts, {{ total_open_ports }} ports)</h3>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Host</th>
+            <th>Hostname</th>
+            <th>Port</th>
+            <th>Protocol</th>
+            <th>Service</th>
+            <th>Version</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for host, info in port_data.hosts.items() %}
+            {% for port_info in info.ports %}
+            <tr>
+              <td><code>{{ host }}</code></td>
+              <td>{{ info.hostname or info.domain or '-' }}</td>
+              <td><code>{{ port_info.port if port_info is mapping else port_info }}</code></td>
+              <td>{{ port_info.protocol if port_info is mapping else 'tcp' }}</td>
+              <td>{{ port_info.service if port_info is mapping else 'unknown' }}</td>
+              <td>{{ port_info.version if port_info is mapping else '' }}{{ ' ' + port_info.product if port_info is mapping and port_info.product else '' }}</td>
+            </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card"><p style="color: var(--text-muted);">No hosts discovered in network scan.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- DNS Tab -->
+  <div class="tab-content" id="tab-dns">
+    <h2 style="margin-bottom: 1.5rem;">DNS Enumeration</h2>
+
+    {% if dns_data.subdomains %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3 style="margin-bottom: 1rem;">Discovered Subdomains ({{ dns_data.subdomains | length }})</h3>
+      <div class="subdomain-grid">
+        {% for sub in dns_data.subdomains %}
+        <div class="subdomain-item">{{ sub }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if dns_data.records %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3 style="margin-bottom: 1rem;">DNS Records</h3>
+      {% for domain, records in dns_data.records.items() %}
+      <h4 style="color: var(--accent); margin: 1rem 0 0.5rem;">{{ domain }}</h4>
+      {% for rtype, values in records.items() %}
+      <div class="record-group">
+        <div class="record-type">{{ rtype }}</div>
+        {% for val in values %}
+        <div class="record-value">{{ val }}</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if dns_data.zone_transfer %}
+    {% for domain, zt in dns_data.zone_transfer.items() %}
+    {% if zt.successful %}
+    <div class="card" style="border-color: var(--critical); margin-bottom: 1.5rem;">
+      <h3 style="color: var(--critical);">&#9888; Zone Transfer Successful: {{ domain }}</h3>
+      <p style="color: var(--text-muted); margin-top: 0.5rem;">
+        Zone transfer was successful via {{ zt.nameserver }}. This is a critical security misconfiguration.
+      </p>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- Web Security Tab -->
+  <div class="tab-content" id="tab-web">
+    <h2 style="margin-bottom: 1.5rem;">HTTP Security Headers</h2>
+    {% for domain, data in headers_data.get('results', {}).items() %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3 style="margin-bottom: 0.25rem;">{{ domain }}</h3>
+      <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">
+        {{ data.url or '' }} — Status {{ data.status_code or 'N/A' }}
+      </p>
+
+      {% if data.present_headers %}
+      <h4 style="color: var(--low); margin-bottom: 0.5rem;">Present Headers</h4>
+      <div style="margin-bottom: 1rem;">
+        {% for h in data.present_headers %}
+        <div style="display: flex; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.85rem;">
+          <span style="color: var(--low);">&#10003;</span>
+          <code style="color: var(--accent);">{{ h.header }}</code>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if data.missing_headers %}
+      <h4 style="color: var(--critical); margin-bottom: 0.5rem;">Missing Headers</h4>
+      <div style="margin-bottom: 1rem;">
+        {% for h in data.missing_headers %}
+        <div style="display: flex; gap: 0.5rem; padding: 0.25rem 0; font-size: 0.85rem;">
+          <span style="color: var(--critical);">&#10007;</span>
+          <code>{{ h }}</code>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if data.info_leaks %}
+      <h4 style="color: var(--medium); margin-bottom: 0.5rem;">Information Leakage</h4>
+      <div style="margin-bottom: 1rem;">
+        {% for leak in data.info_leaks %}
+        <div style="padding: 0.25rem 0; font-size: 0.85rem;">
+          <code style="color: var(--medium);">{{ leak.header }}: {{ leak.value }}</code>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if data.tls_info and data.tls_info.protocol %}
+      <h4 style="margin-bottom: 0.5rem;">TLS Information</h4>
+      <div style="font-size: 0.85rem; color: var(--text-muted);">
+        Protocol: <code>{{ data.tls_info.protocol }}</code> |
+        Cipher: <code>{{ data.tls_info.cipher or 'N/A' }}</code>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Certificates Tab -->
+  <div class="tab-content" id="tab-certs">
+    <h2 style="margin-bottom: 1.5rem;">Certificate &amp; WHOIS Intelligence</h2>
+
+    {% for domain, data in cert_data.get('certificates', {}).items() %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3>{{ domain }}</h3>
+      {% if data.error %}
+      <p style="color: var(--critical); margin-top: 0.5rem;">Error: {{ data.error }}{% if data.detail %} — {{ data.detail[:200] }}{% endif %}</p>
+      {% else %}
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; font-size: 0.85rem;">
+        <div>
+          <div style="color: var(--text-muted);">Issuer</div>
+          <div>{{ data.issuer.organizationName if data.issuer is mapping else data.issuer or 'N/A' }}</div>
+        </div>
+        <div>
+          <div style="color: var(--text-muted);">Expires</div>
+          <div style="color: {% if data.days_until_expiry is not none and data.days_until_expiry < 30 %}var(--critical){% else %}var(--text){% endif %};">
+            {{ data.expiry or 'N/A' }}
+            {% if data.days_until_expiry is not none %}({{ data.days_until_expiry }} days){% endif %}
+          </div>
+        </div>
+        <div>
+          <div style="color: var(--text-muted);">Protocol</div>
+          <div>{{ data.protocol or 'N/A' }}</div>
+        </div>
+        <div>
+          <div style="color: var(--text-muted);">Key</div>
+          <div>{{ data.key_info.algorithm if data.key_info is mapping else 'N/A' }} {% if data.key_info is mapping and data.key_info.key_size %}{{ data.key_info.key_size }}-bit{% endif %}</div>
+        </div>
+      </div>
+      {% if data.san %}
+      <div style="margin-top: 1rem;">
+        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.25rem;">Subject Alternative Names</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+          {% for san in data.san[:20] %}
+          <span style="padding: 0.15rem 0.5rem; background: var(--surface2); border-radius: 4px; font-size: 0.75rem; font-family: var(--mono);">{{ san }}</span>
+          {% endfor %}
+          {% if data.san | length > 20 %}<span style="color: var(--text-muted); font-size: 0.75rem;">+{{ data.san | length - 20 }} more</span>{% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% for domain, data in cert_data.get('whois', {}).items() %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3>WHOIS: {{ domain }}</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; font-size: 0.85rem;">
+        <div><span style="color: var(--text-muted);">Registrar:</span> {{ data.registrar or 'N/A' }}</div>
+        <div><span style="color: var(--text-muted);">Created:</span> {{ data.creation_date or 'N/A' }}</div>
+        <div><span style="color: var(--text-muted);">Expires:</span> {{ data.expiration_date or 'N/A' }}</div>
+        <div><span style="color: var(--text-muted);">DNSSEC:</span> {{ data.dnssec or 'N/A' }}</div>
+      </div>
+      {% if data.nameservers %}
+      <div style="margin-top: 0.75rem;">
+        <span style="color: var(--text-muted); font-size: 0.8rem;">Nameservers:</span>
+        {% for ns in data.nameservers %}<code style="margin-left: 0.5rem; font-size: 0.8rem;">{{ ns }}</code>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Domain Security Tab -->
+  <div class="tab-content" id="tab-domain">
+    <h2 style="margin-bottom: 1.5rem;">Domain Security</h2>
+    {% for domain, data in domain_data.get('results', {}).items() %}
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <h3 style="margin-bottom: 1rem;">{{ domain }}</h3>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <!-- SPF -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">SPF</div>
+          {% if data.spf.exists %}
+          <span style="color: var(--low);">&#10003; Configured</span>
+          <div style="font-family: var(--mono); font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; word-break: break-all;">{{ data.spf.record[:150] }}</div>
+          {% else %}
+          <span style="color: var(--critical);">&#10007; Missing</span>
+          {% endif %}
+        </div>
+
+        <!-- DMARC -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">DMARC</div>
+          {% if data.dmarc.exists %}
+          <span style="color: {% if data.dmarc.policy == 'reject' %}var(--low){% elif data.dmarc.policy == 'quarantine' %}var(--medium){% else %}var(--high){% endif %};">
+            &#10003; Policy: {{ data.dmarc.policy or 'none' }}
+          </span>
+          {% else %}
+          <span style="color: var(--critical);">&#10007; Missing</span>
+          {% endif %}
+        </div>
+
+        <!-- DKIM -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">DKIM</div>
+          {% if data.dkim.found_selectors %}
+          <span style="color: var(--low);">&#10003; {{ data.dkim.found_selectors | length }} selector(s)</span>
+          {% else %}
+          <span style="color: var(--medium);">&#10007; None found</span>
+          {% endif %}
+        </div>
+
+        <!-- DNSSEC -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">DNSSEC</div>
+          {% if data.dnssec.enabled %}
+          <span style="color: var(--low);">&#10003; Enabled</span>
+          {% else %}
+          <span style="color: var(--medium);">&#10007; Not enabled</span>
+          {% endif %}
+        </div>
+
+        <!-- CAA -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">CAA</div>
+          {% if data.caa.exists %}
+          <span style="color: var(--low);">&#10003; Configured</span>
+          {% else %}
+          <span style="color: var(--medium);">&#10007; Missing</span>
+          {% endif %}
+        </div>
+
+        <!-- MX -->
+        <div style="padding: 1rem; background: var(--surface2); border-radius: 8px;">
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">MX Records</div>
+          {% if data.mx_security.records %}
+          <span style="color: var(--low);">{{ data.mx_security.records | length }} record(s)</span>
+          {% else %}
+          <span style="color: var(--text-muted);">No MX records</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if data.issues %}
+      <div style="margin-top: 1.5rem;">
+        <h4 style="margin-bottom: 0.75rem;">Issues Found</h4>
+        {% for issue in data.issues %}
+        <div style="display: flex; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border);">
+          <span class="badge badge-{{ issue.severity }}">{{ issue.severity }}</span>
+          <div>
+            <div style="font-size: 0.85rem;">{{ issue.detail }}</div>
+            {% if issue.recommendation %}<div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem;">{{ issue.recommendation }}</div>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Vulnerabilities Tab -->
+  <div class="tab-content" id="tab-vulns">
+    <h2 style="margin-bottom: 1.5rem;">Vulnerability Findings</h2>
+    {% if vuln_data.findings %}
+    <div class="table-container">
+      <div class="table-header">
+        <h3>{{ vuln_data.findings | length }} Finding(s)</h3>
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="critical">Critical</button>
+          <button class="filter-btn" data-filter="high">High</button>
+          <button class="filter-btn" data-filter="medium">Medium</button>
+        </div>
+      </div>
+      <table id="vuln-table">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>ID</th>
+            <th>Host</th>
+            <th>Port</th>
+            <th>Finding</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in vuln_data.findings %}
+          <tr data-severity="{{ f.severity }}">
+            <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+            <td><code>{{ f.id }}</code></td>
+            <td><code>{{ f.host }}</code></td>
+            <td>{{ f.port }}</td>
+            <td>{{ f.detail }}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">{{ f.recommendation }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card"><p style="color: var(--text-muted);">No vulnerability findings. Services may not have been reachable for testing.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Changes Tab -->
+  {% if has_diff %}
+  <div class="tab-content" id="tab-changes">
+    <h2 style="margin-bottom: 1.5rem;">Changes Since Last Assessment</h2>
+    <div class="card-grid">
+      <div class="card stat-card critical">
+        <div class="stat-label">New Findings</div>
+        <div class="stat-value">{{ diff.summary.total_new }}</div>
+      </div>
+      <div class="card stat-card low">
+        <div class="stat-label">Resolved</div>
+        <div class="stat-value">{{ diff.summary.total_removed }}</div>
+      </div>
+      <div class="card stat-card medium">
+        <div class="stat-label">Changed</div>
+        <div class="stat-value">{{ diff.summary.total_changed }}</div>
+      </div>
+    </div>
+
+    {% if diff.new %}
+    <h3 style="margin-bottom: 0.75rem; color: var(--critical);">New Findings</h3>
+    {% for item in diff.new %}
+    <div class="change-item change-new">
+      <div class="change-icon">&#9650;</div>
+      <div>
+        <span class="badge badge-{{ item.severity }}">{{ item.severity }}</span>
+        <span style="margin-left: 0.5rem;">{{ item.detail }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if diff.removed %}
+    <h3 style="margin: 1.5rem 0 0.75rem; color: var(--low);">Resolved</h3>
+    {% for item in diff.removed %}
+    <div class="change-item change-removed">
+      <div class="change-icon">&#9660;</div>
+      <div>
+        <span class="badge badge-{{ item.severity }}">{{ item.severity }}</span>
+        <span style="margin-left: 0.5rem;">{{ item.detail }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if diff.changed %}
+    <h3 style="margin: 1.5rem 0 0.75rem; color: var(--medium);">Changed</h3>
+    {% for item in diff.changed %}
+    <div class="change-item change-changed">
+      <div class="change-icon">&#9670;</div>
+      <div>
+        <span class="badge badge-{{ item.severity }}">{{ item.severity }}</span>
+        <span style="margin-left: 0.5rem;">{{ item.detail }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- AI Analysis Tab -->
+  {% if has_analysis %}
+  <div class="tab-content" id="tab-analysis">
+    <h2 style="margin-bottom: 1.5rem;">AI Security Analysis</h2>
+
+    <div class="analysis-section">
+      <h2>&#128202; Risk Assessment</h2>
+      {% if analysis.risk_score is defined %}
+      <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+        <span style="font-size: 3rem; font-weight: 700; color: var(--{% if analysis.risk_rating == 'critical' %}critical{% elif analysis.risk_rating == 'high' %}high{% elif analysis.risk_rating == 'medium' %}medium{% else %}low{% endif %});">
+          {{ analysis.risk_score }}
+        </span>
+        <span style="font-size: 1.5rem; color: var(--text-muted);">/ 100</span>
+        <span class="badge badge-{{ analysis.risk_rating }}" style="font-size: 0.9rem; padding: 0.3rem 0.8rem;">{{ analysis.risk_rating }}</span>
+      </div>
+      <div class="risk-meter">
+        <div class="fill risk-{% if analysis.risk_score >= 80 %}critical{% elif analysis.risk_score >= 60 %}high{% elif analysis.risk_score >= 40 %}medium{% else %}low{% endif %}" style="width: {{ analysis.risk_score }}%;"></div>
+      </div>
+      {% endif %}
+      <div class="analysis-text" style="margin-top: 1rem;">{{ analysis.executive_summary | default('') }}</div>
+    </div>
+
+    {% if analysis.priority_actions %}
+    <div class="analysis-section">
+      <h2>&#127919; Priority Actions</h2>
+      <ul class="priority-list">
+        {% for action in analysis.priority_actions %}
+        <li class="priority-item">
+          <div class="priority-num">{{ action.priority }}</div>
+          <div>
+            <div>{{ action.action }}</div>
+            {% if action.effort %}<div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 0.25rem;">Effort: {{ action.effort }} | Impact: {{ action.impact }}</div>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if analysis.recommendations %}
+    <div class="analysis-section">
+      <h2>&#128161; Recommendations</h2>
+      {% for rec in analysis.recommendations %}
+      <div style="display: flex; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border);">
+        <span class="badge badge-{{ rec.priority }}">{{ rec.priority }}</span>
+        <div>
+          <div style="font-weight: 500;">{{ rec.category }}</div>
+          <div style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem;">{{ rec.recommendation }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- All Issues Tab -->
+  <div class="tab-content" id="tab-all-issues">
+    <h2 style="margin-bottom: 1.5rem;">All Issues</h2>
+    <div class="table-container">
+      <div class="table-header">
+        <h3>{{ all_issues | length }} Total Issue(s)</h3>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" class="search-input" placeholder="Search issues..." id="issue-search">
+          <div class="filter-bar">
+            <button class="filter-btn issue-filter active" data-filter="all">All</button>
+            <button class="filter-btn issue-filter" data-filter="critical">Critical</button>
+            <button class="filter-btn issue-filter" data-filter="high">High</button>
+            <button class="filter-btn issue-filter" data-filter="medium">Medium</button>
+            <button class="filter-btn issue-filter" data-filter="low">Low</button>
+          </div>
+        </div>
+      </div>
+      <table id="all-issues-table">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Module</th>
+            <th>Host</th>
+            <th>Issue</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for issue in all_issues %}
+          <tr data-severity="{{ issue.severity }}">
+            <td><span class="badge badge-{{ issue.severity }}">{{ issue.severity }}</span></td>
+            <td>{{ issue.module }}</td>
+            <td><code>{{ issue.host }}</code></td>
+            <td>{{ issue.detail }}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">{{ issue.recommendation }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <p>Generated by <strong>Perimtr</strong> v{{ version }} — Perimeter Intelligence Platform</p>
+  <p>Assessment: {{ timestamp[:19] }} | Report generated for: {{ project_name }}</p>
+</footer>
+
+<script>
+// Tab navigation
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// Severity filter
+document.querySelectorAll('.filter-btn:not(.issue-filter)').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.filter;
+    const table = btn.closest('.table-container').querySelector('table');
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    table.querySelectorAll('tbody tr').forEach(row => {
+      if (filter === 'all' || row.dataset.severity === filter) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  });
+});
+
+// Issue filter + search
+document.querySelectorAll('.issue-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterIssues();
+  });
+});
+
+const issueSearch = document.getElementById('issue-search');
+if (issueSearch) {
+  issueSearch.addEventListener('input', filterIssues);
+}
+
+function filterIssues() {
+  const activeFilter = document.querySelector('.issue-filter.active');
+  const filter = activeFilter ? activeFilter.dataset.filter : 'all';
+  const search = (issueSearch ? issueSearch.value : '').toLowerCase();
+  document.querySelectorAll('#all-issues-table tbody tr').forEach(row => {
+    const matchSeverity = (filter === 'all' || row.dataset.severity === filter);
+    const matchSearch = !search || row.textContent.toLowerCase().includes(search);
+    row.style.display = (matchSeverity && matchSearch) ? '' : 'none';
+  });
+}
+
+// CSS Bar Charts
+function renderBarChart(containerId, data, colorMap) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const maxVal = Math.max(...Object.values(data), 1);
+  let html = '';
+  for (const [label, value] of Object.entries(data)) {
+    const pct = Math.max((value / maxVal) * 100, value > 0 ? 8 : 0);
+    const color = colorMap[label] || 'var(--accent)';
+    html += `
+      <div class="bar-row">
+        <div class="bar-label">${label}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: ${pct}%; background: ${color};">${value}</div>
+        </div>
+      </div>`;
+  }
+  container.innerHTML = html;
+}
+
+// Render severity chart
+const severityData = {{ severity_json | safe }};
+renderBarChart('severity-chart', severityData, {
+  'critical': 'var(--critical)',
+  'high': 'var(--high)',
+  'medium': 'var(--medium)',
+  'low': 'var(--low)',
+  'info': 'var(--info)',
+});
+
+// Render services chart
+const servicesData = {{ services_json | safe }};
+const sortedServices = Object.fromEntries(
+  Object.entries(servicesData).sort((a, b) => b[1] - a[1]).slice(0, 15)
+);
+renderBarChart('services-chart', sortedServices, {});
+
+// Animate bars on load
+setTimeout(() => {
+  document.querySelectorAll('.bar-fill').forEach(bar => {
+    const width = bar.style.width;
+    bar.style.width = '0';
+    requestAnimationFrame(() => {
+      bar.style.width = width;
+    });
+  });
+}, 100);
+</script>
+</body>
+</html>
