@@ -21,6 +21,7 @@ from perimtr.core.config import Config
 from perimtr.core.datastore import DataStore
 from perimtr.core.diff_engine import DiffEngine
 from perimtr.core.llm_engine import LLMEngine
+from perimtr.core.module_base import ReconModule
 from perimtr.modules import MODULES
 from perimtr.reports.html_report import HTMLReportGenerator
 
@@ -42,39 +43,118 @@ class Engine:
         self.llm_engine = LLMEngine(self.data)
         self.report_generator = HTMLReportGenerator(self.data)
 
-    def run_assessment(self) -> dict:
+    def run_assessment(
+        self,
+        dry_run: bool = False,
+        modules_filter: Optional[list] = None,
+        output_dir: Optional[str] = None,
+        no_report: bool = False,
+    ) -> dict:
         """
         Run a full perimeter assessment.
 
+        Args:
+            dry_run: If True, print what would run without executing scans.
+            modules_filter: Optional list of module names to run.  When
+                supplied only the named modules are executed (if enabled).
+            output_dir: Override the output directory for reports.
+            no_report: If True, skip HTML report generation.
+
         Returns:
-            Complete assessment results dict
+            Complete assessment results dict (empty dict on dry-run or error).
         """
+        results: dict = {}
+
+        try:
+            return self._run_assessment_inner(
+                dry_run=dry_run,
+                modules_filter=modules_filter,
+                output_dir=output_dir,
+                no_report=no_report,
+            )
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Assessment interrupted by user.[/yellow]")
+            if results:
+                console.print("[yellow]Saving partial results...[/yellow]")
+                try:
+                    path = self.datastore.save_assessment(results)
+                    console.print(f"[yellow]Partial results saved: {path}[/yellow]")
+                except Exception as save_err:
+                    logger.warning(f"Could not save partial results: {save_err}")
+            return results
+        except Exception as exc:
+            logger.exception(f"Assessment failed with unexpected error: {exc}")
+            console.print(f"\n[red]Assessment failed: {exc}[/red]")
+            # Attempt cleanup / partial save
+            if results:
+                try:
+                    path = self.datastore.save_assessment(results)
+                    console.print(f"[yellow]Partial results saved: {path}[/yellow]")
+                except Exception:
+                    pass
+            return results
+
+    def _run_assessment_inner(
+        self,
+        dry_run: bool = False,
+        modules_filter: Optional[list] = None,
+        output_dir: Optional[str] = None,
+        no_report: bool = False,
+    ) -> dict:
+        """Internal implementation of :meth:`run_assessment`."""
         start_time = time.time()
         targets = self.data.get("targets", {})
         threads = self.data.get("scan_settings", {}).get("threads", 5)
 
-        console.print(Panel(
-            f"[bold cyan]Starting Perimeter Assessment[/bold cyan]\n"
-            f"Networks: {', '.join(targets.get('networks', [])) or 'None'}\n"
-            f"Domains: {', '.join(targets.get('domains', [])) or 'None'}\n"
-            f"Modules: {sum(1 for m in MODULES if m(self.data).is_enabled(self.data))} enabled",
-            title="🔍 Perimtr Assessment",
-            border_style="cyan",
-        ))
+        # Validate that at least one target exists
+        networks = targets.get("networks") or []
+        domains = targets.get("domains") or []
+        if not networks and not domains:
+            console.print(
+                "[red]No targets defined. Add networks or domains to your config.[/red]"
+            )
+            return {}
+
+        # Use module_base validation to clean targets
+        from perimtr.core.module_base import ReconModule as _Base
+        _dummy = type("_DummyModule", (_Base,), {
+            "name": "_dummy",
+            "description": "",
+            "run": lambda self, t: {},
+        })(self.data)
+        clean_targets = _dummy.validate_targets(targets)
 
         # Initialize enabled modules
         enabled_modules = []
         for ModuleClass in MODULES:
             module = ModuleClass(self.data)
-            if module.is_enabled(self.data):
-                enabled_modules.append(module)
+            if not module.is_enabled(self.data):
+                continue
+            if modules_filter and module.name not in modules_filter:
+                continue
+            enabled_modules.append(module)
 
         if not enabled_modules:
             console.print("[yellow]No modules enabled. Check your configuration.[/yellow]")
             return {}
 
+        console.print(Panel(
+            f"[bold cyan]{'DRY RUN — ' if dry_run else ''}Starting Perimeter Assessment[/bold cyan]\n"
+            f"Networks: {', '.join(clean_targets.get('networks', [])) or 'None'}\n"
+            f"Domains: {', '.join(clean_targets.get('domains', [])) or 'None'}\n"
+            f"Modules: {len(enabled_modules)} enabled",
+            title="🔍 Perimtr Assessment",
+            border_style="cyan",
+        ))
+
+        if dry_run:
+            console.print("\n[bold yellow]Dry run mode — no scans will be executed.[/bold yellow]")
+            for m in enabled_modules:
+                console.print(f"  Would run: [cyan]{m.name}[/cyan] — {m.description}")
+            return {}
+
         # Run modules
-        results = {}
+        results: dict = {}
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -95,7 +175,7 @@ class Engine:
                         f"  {module.description}",
                         total=None,
                     )
-                    future = executor.submit(module.safe_run, targets)
+                    future = executor.submit(module.safe_run, clean_targets)
                     futures[future] = (module, task_id)
 
                 for future in as_completed(futures):
@@ -111,6 +191,7 @@ class Engine:
                             error = module_results.get("_meta", {}).get("error", "Unknown error")
                             progress.update(task_id, description=f"  [red]✗[/red] {module.description}: {error[:50]}")
                     except Exception as e:
+                        logger.exception(f"Unexpected error collecting results from {module.name}: {e}")
                         progress.update(task_id, description=f"  [red]✗[/red] {module.description}: {e}")
                     progress.advance(overall)
 
@@ -135,16 +216,20 @@ class Engine:
             self._display_risk_summary(llm_analysis)
 
         # Generate HTML report
-        report_dir = Path(self.data.get("data_dir", "data")) / self.data.get("project_name", "default")
-        report_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = str(report_dir / f"report_{timestamp}.html")
-        self.report_generator.generate(results, diff, llm_analysis, report_path)
-        console.print(f"[green]Report generated:[/green] {report_path}")
+        if not no_report:
+            if output_dir:
+                report_dir = Path(output_dir)
+            else:
+                report_dir = Path(self.data.get("data_dir", "data")) / self.data.get("project_name", "default")
+            report_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_path = str(report_dir / f"report_{timestamp}.html")
+            self.report_generator.generate(results, diff, llm_analysis, report_path)
+            console.print(f"[green]Report generated:[/green] {report_path}")
 
-        # Also generate a "latest" report
-        latest_path = str(report_dir / "report_latest.html")
-        self.report_generator.generate(results, diff, llm_analysis, latest_path)
+            # Also generate a "latest" report
+            latest_path = str(report_dir / "report_latest.html")
+            self.report_generator.generate(results, diff, llm_analysis, latest_path)
 
         elapsed = time.time() - start_time
         console.print(f"\n[bold green]Assessment complete in {elapsed:.1f}s[/bold green]")

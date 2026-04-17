@@ -51,8 +51,22 @@ def cmd_scan(args):
     else:
         config.load()
 
+    # Parse --modules flag
+    modules_filter = None
+    if hasattr(args, "modules") and args.modules:
+        modules_filter = [m.strip() for m in args.modules.split(",") if m.strip()]
+
+    dry_run = getattr(args, "dry_run", False)
+    output_dir = getattr(args, "output_dir", None)
+    no_report = getattr(args, "no_report", False)
+
     engine = Engine(config)
-    engine.run_assessment()
+    engine.run_assessment(
+        dry_run=dry_run,
+        modules_filter=modules_filter,
+        output_dir=output_dir,
+        no_report=no_report,
+    )
 
 
 def cmd_setup(args):
@@ -90,6 +104,16 @@ def cmd_report(args):
     if previous:
         diff_engine = DiffEngine()
         diff = diff_engine.compare(latest, previous)
+
+    use_json = getattr(args, "json", False)
+
+    if use_json:
+        import json
+        output = args.output or "report.json"
+        with open(output, "w") as f:
+            json.dump({"assessment": latest, "diff": diff}, f, indent=2, default=str)
+        console.print(f"[green]JSON report generated:[/green] {output}")
+        return
 
     # LLM analysis
     llm = LLMEngine(config.data)
@@ -245,25 +269,53 @@ def main():
 
     # scan
     scan_parser = subparsers.add_parser("scan", help="Run perimeter assessment")
+    scan_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Print what would be scanned without actually running modules",
+    )
+    scan_parser.add_argument(
+        "--modules",
+        default=None,
+        help="Comma-separated list of module names to run (e.g. port_scanner,dns_enum)",
+    )
+    scan_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Directory to write reports to (overrides config data_dir)",
+    )
+    scan_parser.add_argument(
+        "--no-report",
+        action="store_true",
+        default=False,
+        help="Skip HTML report generation after the scan",
+    )
 
     # setup
-    setup_parser = subparsers.add_parser("setup", help="Interactive setup")
+    setup_parser = subparsers.add_parser("setup", help="Interactive setup")  # noqa: F841
 
     # report
     report_parser = subparsers.add_parser("report", help="Generate report from latest")
     report_parser.add_argument("-o", "--output", help="Output file path")
+    report_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Output JSON instead of HTML",
+    )
 
     # diff
-    diff_parser = subparsers.add_parser("diff", help="Show changes between assessments")
+    diff_parser = subparsers.add_parser("diff", help="Show changes between assessments")  # noqa: F841
 
     # history
-    history_parser = subparsers.add_parser("history", help="List assessments")
+    history_parser = subparsers.add_parser("history", help="List assessments")  # noqa: F841
 
     # schedule
-    schedule_parser = subparsers.add_parser("schedule", help="Start scheduler")
+    schedule_parser = subparsers.add_parser("schedule", help="Start scheduler")  # noqa: F841
 
     # version
-    version_parser = subparsers.add_parser("version", help="Show version")
+    version_parser = subparsers.add_parser("version", help="Show version")  # noqa: F841
 
     args = parser.parse_args()
     setup_logging(args.verbose)
@@ -278,13 +330,50 @@ def main():
         "version": cmd_version,
     }
 
-    if args.command in commands:
-        commands[args.command](args)
-    elif args.command is None:
-        # Default: run scan
-        cmd_scan(args)
-    else:
-        parser.print_help()
+    try:
+        if args.command in commands:
+            commands[args.command](args)
+        elif args.command is None:
+            # Default: run scan
+            cmd_scan(args)
+        else:
+            parser.print_help()
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted. Exiting.[/yellow]")
+        sys.exit(0)
+
+    except FileNotFoundError as exc:
+        console.print(f"[red]Config file not found:[/red] {exc}")
+        console.print("[dim]Run 'perimtr setup' to create a configuration.[/dim]")
+        sys.exit(1)
+
+    except Exception:
+        # Import here to access ConfigError after potential import issues
+        try:
+            from perimtr.core.config import ConfigError
+        except ImportError:
+            ConfigError = None  # type: ignore[assignment,misc]
+
+        import traceback as _tb
+
+        # Re-raise so we can inspect the live exception
+        exc_info = sys.exc_info()
+        exc = exc_info[1]
+
+        if ConfigError is not None and isinstance(exc, ConfigError):
+            console.print("[red]Configuration error:[/red]")
+            for error in exc.errors:
+                console.print(f"  [red]•[/red] {error}")
+            sys.exit(1)
+
+        # Generic unexpected error
+        console.print(f"[red]Unexpected error:[/red] {exc}")
+        if not args.verbose:
+            console.print("[dim]Run with -v for full traceback.[/dim]")
+        else:
+            _tb.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

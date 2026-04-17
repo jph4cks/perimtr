@@ -3,13 +3,48 @@ Port Scanner Module.
 
 Performs slow, stealthy SYN scans of well-known ports on target networks.
 Uses python-nmap with rate limiting to avoid being blocked.
+
+How it works:
+  1. Domain names in ``targets["domains"]`` are resolved to IP addresses.
+  2. If ``python-nmap`` is installed, nmap is used for accurate results
+     (SYN scan with sudo, falls back to TCP connect scan without sudo).
+  3. If nmap is unavailable, a socket-based fallback scans each host/port
+     combination sequentially with configurable inter-packet delay.
+  4. Results are keyed by IP address.  Each host entry includes the list
+     of open ports with service names and optional banner/version strings.
+
+Data produced:
+  {
+    "hosts": {
+        "<ip>": {
+            "ports": [
+                {
+                    "port": int,
+                    "protocol": str,  # "tcp"
+                    "state": "open",
+                    "service": str,
+                    "version": str,   # nmap only
+                    "product": str,   # nmap only
+                }
+            ],
+            "hostname": str | None,
+            "domain": str | None
+        }
+    },
+    "total_hosts_scanned": int,
+    "total_open_ports": int
+  }
+
+Rate limiting:
+  The scan speed is controlled by ``scan_settings.port_scan_rate`` (packets
+  per second). Default is 10 pps.  Lower values are stealthier.
 """
 
 import ipaddress
 import logging
 import socket
 import time
-from typing import Any
+from typing import Optional
 
 from perimtr.core.module_base import ReconModule
 
@@ -24,20 +59,52 @@ TOP_PORTS = [
 
 
 class PortScanner(ReconModule):
-    """Scans network ranges for open ports using slow, stealthy techniques."""
+    """
+    Network port scanner with stealthy rate limiting.
+
+    Scans target networks and domain IPs for open ports using either nmap
+    (preferred) or raw sockets (fallback).  Results include service names
+    and — when nmap is available — version/product strings from service
+    detection (``-sV``).
+
+    Attributes:
+        name (str): Module identifier ``"port_scanner"``.
+        description (str): Human-readable description.
+        category (str): Module category ``"network"``.
+    """
 
     name = "port_scanner"
     description = "Network port scanning with rate limiting to avoid detection"
     category = "network"
 
     def run(self, targets: dict) -> dict:
-        """Scan all target networks for open ports."""
+        """
+        Scan all target networks and domain IPs for open ports.
+
+        Resolves domain names to IPs, then delegates to either
+        ``_scan_with_nmap`` (if nmap is importable) or
+        ``_scan_with_sockets`` (fallback).
+
+        Args:
+            targets: dict with keys:
+                - ``networks`` (list[str]): CIDR ranges to scan
+                  (e.g. ``["192.168.1.0/24"]``).
+                - ``domains`` (list[str]): Domain names to resolve and scan.
+
+        Returns:
+            dict with keys ``hosts``, ``total_hosts_scanned``, and
+            ``total_open_ports``.  See module docstring for the full schema.
+
+        Raises:
+            No exceptions propagate — all errors are logged and the fallback
+            scanner is used when nmap fails.
+        """
         results = {"hosts": {}, "total_hosts_scanned": 0, "total_open_ports": 0}
         networks = targets.get("networks", [])
         domains = targets.get("domains", [])
 
         # Also resolve domains to IPs for scanning
-        domain_ips = {}
+        domain_ips: dict[str, str] = {}
         for domain in domains:
             try:
                 ip = socket.gethostbyname(domain)
@@ -55,8 +122,28 @@ class PortScanner(ReconModule):
 
         return results
 
-    def _scan_with_nmap(self, networks: list, domain_ips: dict, results: dict) -> dict:
-        """Scan using python-nmap for more accurate results."""
+    def _scan_with_nmap(
+        self, networks: list, domain_ips: dict, results: dict
+    ) -> dict:
+        """
+        Scan using python-nmap for accurate service detection.
+
+        Uses a SYN scan (``-sS``) with sudo when available; falls back to a
+        TCP connect scan (``-sT``) when root access is denied.  Domain IPs are
+        scanned with service version detection (``-sV``).
+
+        Args:
+            networks: List of CIDR network strings to scan.
+            domain_ips: Mapping of ``domain → IP`` for resolved domains.
+            results: Partially populated results dict to update in-place.
+
+        Returns:
+            Updated ``results`` dict with discovered hosts and ports.
+
+        Raises:
+            ImportError: If ``python-nmap`` is not installed (caught by
+                caller, which triggers socket fallback).
+        """
         import nmap
 
         nm = nmap.PortScanner()
@@ -115,13 +202,32 @@ class PortScanner(ReconModule):
 
         return results
 
-    def _scan_with_sockets(self, networks: list, domain_ips: dict, results: dict) -> dict:
-        """Fallback: scan using raw sockets (no nmap required)."""
+    def _scan_with_sockets(
+        self, networks: list, domain_ips: dict, results: dict
+    ) -> dict:
+        """
+        Fallback scanner using raw Python sockets (no nmap required).
+
+        Performs sequential TCP connect attempts on all ports in ``TOP_PORTS``
+        for each discovered IP.  The inter-connection delay is derived from
+        ``scan_settings.port_scan_rate`` to approximate the requested rate.
+
+        Args:
+            networks: List of CIDR network strings to expand into host IPs.
+            domain_ips: Mapping of ``domain → IP`` for resolved domains.
+            results: Partially populated results dict to update in-place.
+
+        Returns:
+            Updated ``results`` dict with discovered hosts and ports.
+
+        Raises:
+            No exceptions propagate — connection errors are silently ignored.
+        """
         rate = self.scan_settings.get("port_scan_rate", 10)
         delay = 1.0 / rate if rate > 0 else 0.1
 
         # Collect all IPs to scan
-        all_ips = []
+        all_ips: list[str] = []
         for network in networks:
             try:
                 net = ipaddress.ip_network(network, strict=False)
@@ -133,15 +239,16 @@ class PortScanner(ReconModule):
             if ip not in all_ips:
                 all_ips.append(ip)
 
-        # Scan each host
+        # Scan each host — port by port
         for ip in all_ips:
-            open_ports = []
+            open_ports: list[dict] = []
             for port in TOP_PORTS:
                 try:
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.settimeout(2)
                     result = sock.connect_ex((ip, port))
                     if result == 0:
+                        # Port is open — record it
                         service = self._get_service_name(port)
                         open_ports.append({
                             "port": port,
@@ -167,7 +274,30 @@ class PortScanner(ReconModule):
 
     @staticmethod
     def _parse_nmap_host(nm, host: str) -> dict:
-        """Parse nmap results for a single host."""
+        """
+        Parse nmap scan results for a single host into a normalized dict.
+
+        Extracts all open ports across all protocols (tcp/udp) and includes
+        service name, version, and product strings from nmap's ``-sV`` output.
+
+        Args:
+            nm: ``nmap.PortScanner`` instance that has already completed a scan.
+            host: IP address string to retrieve from the nmap results.
+
+        Returns:
+            dict with keys ``ports`` (list of open port dicts) and
+            ``hostname`` (reverse DNS result or ``None``).
+
+        Example::
+
+            {
+                "ports": [
+                    {"port": 80, "protocol": "tcp", "state": "open",
+                     "service": "http", "version": "1.19.0", "product": "nginx"}
+                ],
+                "hostname": "web.example.com"
+            }
+        """
         ports = []
         for proto in nm[host].all_protocols():
             for port in nm[host][proto]:
@@ -188,7 +318,24 @@ class PortScanner(ReconModule):
 
     @staticmethod
     def _get_service_name(port: int) -> str:
-        """Get common service name for a port."""
+        """
+        Return the well-known service name for a common port number.
+
+        Falls back to ``"unknown"`` for ports not in the built-in mapping.
+
+        Args:
+            port: TCP port number.
+
+        Returns:
+            Service name string (e.g. ``"http"``, ``"ssh"``).
+
+        Example::
+
+            >>> PortScanner._get_service_name(443)
+            'https'
+            >>> PortScanner._get_service_name(99999)
+            'unknown'
+        """
         services = {
             21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns",
             80: "http", 110: "pop3", 111: "rpcbind", 135: "msrpc",
@@ -206,7 +353,16 @@ class PortScanner(ReconModule):
 
     @staticmethod
     def _reverse_lookup(ip: str) -> str:
-        """Attempt reverse DNS lookup."""
+        """
+        Attempt a reverse DNS (PTR) lookup for an IP address.
+
+        Args:
+            ip: IPv4 address string (e.g. ``"93.184.216.34"``).
+
+        Returns:
+            Hostname string on success, or an empty string if the lookup
+            fails or times out.
+        """
         try:
             return socket.gethostbyaddr(ip)[0]
         except (socket.herror, socket.gaierror, OSError):
