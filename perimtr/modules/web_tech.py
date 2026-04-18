@@ -720,6 +720,7 @@ class WebTechFingerprint(ReconModule):
                         timeout=timeout,
                         allow_redirects=True,
                         verify=False,
+                        # WARNING: Disabling TLS verification weakens security guarantees.
                         headers={"User-Agent": "Perimtr/1.0 Security Scanner"},
                     )
                     return resp
@@ -761,6 +762,7 @@ class WebTechFingerprint(ReconModule):
                         timeout=max(timeout // 2, 5),
                         allow_redirects=True,
                         verify=False,
+                        # WARNING: Disabling TLS verification weakens security guarantees.
                         headers={"User-Agent": "Perimtr/1.0 Security Scanner"},
                     )
                     results[path] = resp.status_code
@@ -773,6 +775,7 @@ class WebTechFingerprint(ReconModule):
                             timeout=max(timeout // 2, 5),
                             allow_redirects=True,
                             verify=False,
+                            # WARNING: Disabling TLS verification weakens security guarantees.
                             headers={"User-Agent": "Perimtr/1.0 Security Scanner"},
                             stream=True,  # Don't download body
                         )

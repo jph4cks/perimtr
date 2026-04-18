@@ -689,7 +689,12 @@ class SSLAudit(ReconModule):
 
         return vulns
 
-    def _check_compression(self, domain: str, timeout: int) -> bool:
+    def _check_compression(
+        self,
+        domain: str,
+        timeout: int,
+        verify_ssl: bool = True,
+    ) -> bool:
         """
         Check whether the server applies HTTP response compression.
 
@@ -709,7 +714,10 @@ class SSLAudit(ReconModule):
             resp = requests.get(
                 f"https://{domain}/",
                 timeout=timeout,
-                verify=False,
+                verify=verify_ssl,
+                # Some targets may have misconfigured TLS. Allow disabling verification explicitly.
+                # WARNING: Disabling verification weakens security guarantees and may enable MITM.
+
                 headers={
                     "User-Agent": "Perimtr/1.0 Security Scanner",
                     "Accept-Encoding": "gzip, deflate",
@@ -718,8 +726,7 @@ class SSLAudit(ReconModule):
             encoding = resp.headers.get("Content-Encoding", "")
             return bool(encoding)
         except requests.RequestException:
-            pass
-        return False
+            return False
 
     # -----------------------------------------------------------------------
     # Grading
