@@ -369,6 +369,7 @@ class VulnCheck(ReconModule):
         Raises:
             No exceptions propagate; all errors return an empty string.
         """
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
@@ -386,10 +387,15 @@ class VulnCheck(ReconModule):
                 sock.send(b"\r\n")
 
             banner = sock.recv(1024).decode("utf-8", errors="ignore").strip()
-            sock.close()
             return banner[:500]  # Truncate to avoid storing large responses
         except Exception:
             return ""
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
 
     def _run_check(
         self, host: str, domain: str, port: int, check: dict, banner: str
