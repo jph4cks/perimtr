@@ -239,57 +239,67 @@ class WhoisCert(ReconModule):
         """
         try:
             context = ssl.create_default_context()
-            conn = socket.create_connection((domain, 443), timeout=10)
-            ssock = context.wrap_socket(conn, server_hostname=domain)
 
-            cert = ssock.getpeercert()
-            cert_bin = ssock.getpeercert(binary_form=True)
-
-            # Flatten the RFC 2459 RDN structure into a simple dict
-            subject: dict = {}
-            for field in cert.get("subject", []):
-                for key, value in field:
-                    subject[key] = value
-
-            issuer: dict = {}
-            for field in cert.get("issuer", []):
-                for key, value in field:
-                    issuer[key] = value
-
-            # SAN entries are tuples of (type, value) e.g. ("DNS", "example.com")
-            san: list = [entry[1] for entry in cert.get("subjectAltName", [])]
-
-            not_before = cert.get("notBefore", "")
-            not_after = cert.get("notAfter", "")
-
-            # Compute remaining validity days
-            days_until_expiry: Optional[int] = None
+            # Ensure sockets are closed even if parsing fails mid-way.
+            conn: Optional[socket.socket] = None
+            ssock: Optional[ssl.SSLSocket] = None
             try:
-                expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
-                days_until_expiry = (expiry - datetime.now()).days
-            except (ValueError, TypeError):
-                pass
+                conn = socket.create_connection((domain, 443), timeout=10)
+                ssock = context.wrap_socket(conn, server_hostname=domain)
 
-            # Extract key details using the cryptography library
-            key_info = self._get_key_info(cert_bin)
+                cert = ssock.getpeercert()
+                cert_bin = ssock.getpeercert(binary_form=True)
 
-            result: dict = {
-                "subject": subject,
-                "issuer": issuer,
-                "san": san,
-                "valid_from": not_before,
-                "expiry": not_after,
-                "days_until_expiry": days_until_expiry,
-                "serial_number": cert.get("serialNumber"),
-                "version": cert.get("version"),
-                "protocol": ssock.version(),
-                "cipher": ssock.cipher()[0] if ssock.cipher() else None,
-                "key_info": key_info,
-            }
+                # Flatten the RFC 2459 RDN structure into a simple dict
+                subject: dict = {}
+                for field in cert.get("subject", []):
+                    for key, value in field:
+                        subject[key] = value
 
-            ssock.close()
-            conn.close()
-            return result
+                issuer: dict = {}
+                for field in cert.get("issuer", []):
+                    for key, value in field:
+                        issuer[key] = value
+
+                # SAN entries are tuples of (type, value) e.g. ("DNS", "example.com")
+                san: list = [entry[1] for entry in cert.get("subjectAltName", [])]
+
+                not_before = cert.get("notBefore", "")
+                not_after = cert.get("notAfter", "")
+
+                # Compute remaining validity days
+                days_until_expiry: Optional[int] = None
+                try:
+                    expiry = datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
+                    days_until_expiry = (expiry - datetime.now()).days
+                except (ValueError, TypeError):
+                    pass
+
+                # Extract key details using the cryptography library
+                key_info = self._get_key_info(cert_bin)
+
+                result: dict = {
+                    "subject": subject,
+                    "issuer": issuer,
+                    "san": san,
+                    "valid_from": not_before,
+                    "expiry": not_after,
+                    "days_until_expiry": days_until_expiry,
+                    "serial_number": cert.get("serialNumber"),
+                    "version": cert.get("version"),
+                    "protocol": ssock.version(),
+                    "cipher": ssock.cipher()[0] if ssock.cipher() else None,
+                    "key_info": key_info,
+                }
+
+                return result
+            finally:
+                try:
+                    if ssock:
+                        ssock.close()
+                finally:
+                    if conn:
+                        conn.close()
 
         except ssl.SSLCertVerificationError as e:
             # Return a partial result so that _check_cert_issues can flag it
