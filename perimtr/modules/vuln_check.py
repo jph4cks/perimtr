@@ -594,14 +594,15 @@ class VulnCheck(ReconModule):
         Raises:
             No exceptions propagate; all SMTP errors return ``None``.
         """
+        import smtplib
+
+        smtp = None
         try:
-            import smtplib
             smtp = smtplib.SMTP(host, port, timeout=10)
             smtp.ehlo("test.local")
             code, _ = smtp.docmd("MAIL FROM:", "<test@test.com>")
             if code == 250:
                 code2, _ = smtp.docmd("RCPT TO:", "<test@example.org>")
-                smtp.quit()
                 if code2 == 250:
                     return {
                         "id": check["id"],
@@ -610,9 +611,15 @@ class VulnCheck(ReconModule):
                         "detail": "SMTP server appears to allow open relaying",
                         "recommendation": check["recommendation"],
                     }
-            smtp.quit()
-        except Exception:
-            pass
+        except (OSError, smtplib.SMTPException):
+            return None
+        finally:
+            if smtp is not None:
+                try:
+                    smtp.quit()
+                except Exception:
+                    # Best-effort cleanup; do not fail the scan on quit errors.
+                    pass
         return None
 
     def _check_http_cleartext(
@@ -667,13 +674,13 @@ class VulnCheck(ReconModule):
             Finding dict if Redis responds to unauthenticated PING, ``None``
             otherwise.
         """
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((host, port))
             sock.send(b"PING\r\n")
             response = sock.recv(1024).decode("utf-8", errors="ignore")
-            sock.close()
             if "+PONG" in response:
                 return {
                     "id": check["id"],
@@ -682,8 +689,14 @@ class VulnCheck(ReconModule):
                     "detail": "Redis accepts unauthenticated connections (PING → PONG)",
                     "recommendation": check["recommendation"],
                 }
-        except Exception:
-            pass
+        except OSError:
+            return None
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
         return None
 
     def _check_elasticsearch(self, host: str, port: int, check: dict) -> Optional[dict]:
@@ -743,23 +756,29 @@ class VulnCheck(ReconModule):
             for community in ["public", "private"]:
                 # Build a minimal SNMPv1 GET-REQUEST packet
                 packet = self._build_snmp_get(community)
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.settimeout(3)
-                sock.sendto(packet, (host, port))
+                sock = None
                 try:
-                    data, _ = sock.recvfrom(1024)
-                    if len(data) > 0:
-                        sock.close()
-                        return {
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.settimeout(3)
+                    sock.sendto(packet, (host, port))
+                    try:
+                        data, _ = sock.recvfrom(1024)
+                        if len(data) > 0:
+                            return {
                             "id": check["id"],
                             "name": check["name"],
                             "severity": check["severity"],
                             "detail": f"SNMP responds to default community string '{community}'",
                             "recommendation": check["recommendation"],
-                        }
-                except socket.timeout:
-                    pass
-                sock.close()
+                            }
+                    except socket.timeout:
+                        pass
+                finally:
+                    if sock is not None:
+                        try:
+                            sock.close()
+                        except Exception:
+                            pass
         except Exception:
             pass
         return None
