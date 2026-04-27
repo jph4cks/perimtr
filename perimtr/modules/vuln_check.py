@@ -341,14 +341,20 @@ class VulnCheck(ReconModule):
         Returns:
             ``True`` if the port accepts a TCP connection, ``False`` otherwise.
         """
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(3)
             result = sock.connect_ex((host, port))
-            sock.close()
             return result == 0
         except (socket.timeout, OSError):
             return False
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
 
     def _grab_banner(self, host: str, port: int) -> str:
         """
@@ -644,17 +650,17 @@ class VulnCheck(ReconModule):
         """
         try:
             url = f"http://{domain or host}"
-            resp = requests.get(url, timeout=10, allow_redirects=False)
-            location = resp.headers.get("Location", "")
-            if not location.startswith("https://"):
-                return {
-                    "id": check["id"],
-                    "name": check["name"],
-                    "severity": check["severity"],
-                    "detail": "HTTP does not redirect to HTTPS",
-                    "recommendation": check["recommendation"],
-                }
-        except Exception:
+            with requests.get(url, timeout=10, allow_redirects=False, stream=True) as resp:
+                location = resp.headers.get("Location", "")
+                if not location.startswith("https://"):
+                    return {
+                        "id": check["id"],
+                        "name": check["name"],
+                        "severity": check["severity"],
+                        "detail": "HTTP does not redirect to HTTPS",
+                        "recommendation": check["recommendation"],
+                    }
+        except requests.RequestException:
             pass
         return None
 
@@ -717,21 +723,21 @@ class VulnCheck(ReconModule):
             otherwise.
         """
         try:
-            resp = requests.get(f"http://{host}:{port}/", timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                if "cluster_name" in data or "version" in data:
-                    return {
-                        "id": check["id"],
-                        "name": check["name"],
-                        "severity": check["severity"],
-                        "detail": (
-                            f"Elasticsearch accessible without authentication "
-                            f"(cluster: {data.get('cluster_name', 'unknown')})"
-                        ),
-                        "recommendation": check["recommendation"],
-                    }
-        except Exception:
+            with requests.get(f"http://{host}:{port}/", timeout=5, stream=True) as resp:
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if "cluster_name" in data or "version" in data:
+                        return {
+                            "id": check["id"],
+                            "name": check["name"],
+                            "severity": check["severity"],
+                            "detail": (
+                                f"Elasticsearch accessible without authentication "
+                                f"(cluster: {data.get('cluster_name', 'unknown')})"
+                            ),
+                            "recommendation": check["recommendation"],
+                        }
+        except (ValueError, requests.RequestException):
             pass
         return None
 
@@ -765,11 +771,11 @@ class VulnCheck(ReconModule):
                         data, _ = sock.recvfrom(1024)
                         if len(data) > 0:
                             return {
-                            "id": check["id"],
-                            "name": check["name"],
-                            "severity": check["severity"],
-                            "detail": f"SNMP responds to default community string '{community}'",
-                            "recommendation": check["recommendation"],
+                                "id": check["id"],
+                                "name": check["name"],
+                                "severity": check["severity"],
+                                "detail": f"SNMP responds to default community string '{community}'",
+                                "recommendation": check["recommendation"],
                             }
                     except socket.timeout:
                         pass
